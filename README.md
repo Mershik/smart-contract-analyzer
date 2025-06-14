@@ -113,6 +113,253 @@ docker run -p 5000:5000 contract-analyzer
 └── dist/                # Production сборка
 ```
 
+## 🏗️ Архитектура и логика работы
+
+### Общая архитектура
+
+Приложение построено по принципу **клиент-серверной архитектуры** с четким разделением ответственности:
+
+```
+┌─────────────────┐    HTTP/REST API    ┌─────────────────┐    AI API    ┌─────────────────┐
+│   React Client  │ ◄─────────────────► │  Express Server │ ◄──────────► │   Google Gemini │
+│   (Frontend)    │                     │   (Backend)     │              │      AI         │
+└─────────────────┘                     └─────────────────┘              └─────────────────┘
+        │                                        │
+        ▼                                        ▼
+┌─────────────────┐                     ┌─────────────────┐
+│   Local Storage │                     │   File Storage  │
+│   (История)     │                     │   (Результаты)  │
+└─────────────────┘                     └─────────────────┘
+```
+
+### Поток данных и обработка
+
+#### 1. **Загрузка и валидация договора**
+```typescript
+// client/src/components/contract-input.tsx
+const handleFileUpload = (file: File) => {
+  // Валидация типа файла (.txt, .docx)
+  // Проверка размера (макс. 10MB)
+  // Извлечение текста из файла
+  // Передача в состояние приложения
+}
+```
+
+#### 2. **Подготовка запроса к ИИ**
+```typescript
+// client/src/hooks/use-gemini-analysis.ts
+const analyzeContract = async (contractText: string, requirements: string[]) => {
+  const prompt = buildAnalysisPrompt({
+    contractText,
+    requirements,
+    analysisType: selectedMode
+  });
+  
+  return await fetch('/api/analysis', {
+    method: 'POST',
+    body: JSON.stringify({ prompt, contractText })
+  });
+}
+```
+
+#### 3. **Серверная обработка**
+```typescript
+// server/routes.ts
+app.post('/api/analysis', async (req, res) => {
+  try {
+    // 1. Валидация входных данных
+    const { prompt, contractText } = validateRequest(req.body);
+    
+    // 2. Вызов Google Gemini API
+    const aiResponse = await geminiClient.generateContent(prompt);
+    
+    // 3. Парсинг и структурирование ответа
+    const structuredResult = parseAIResponse(aiResponse);
+    
+    // 4. Сохранение результата
+    const analysisId = await saveAnalysis(structuredResult);
+    
+    // 5. Возврат результата клиенту
+    res.json({ success: true, data: structuredResult, id: analysisId });
+  } catch (error) {
+    handleError(error, res);
+  }
+});
+```
+
+### Типы анализа
+
+#### 🔍 **Анализ по чек-листу**
+```typescript
+interface ChecklistAnalysis {
+  requirements: RequirementCheck[];
+  overallCompliance: number;
+  criticalIssues: Issue[];
+  recommendations: string[];
+}
+
+interface RequirementCheck {
+  requirement: string;
+  status: 'fulfilled' | 'partial' | 'missing' | 'unclear';
+  evidence: string[];
+  suggestions: string[];
+}
+```
+
+#### ⚠️ **Анализ рисков**
+```typescript
+interface RiskAnalysis {
+  risks: Risk[];
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  categories: RiskCategory[];
+  mitigation: MitigationStrategy[];
+}
+
+interface Risk {
+  type: string;
+  severity: number;
+  probability: number;
+  description: string;
+  impact: string;
+  location: string; // Где в договоре найден риск
+}
+```
+
+#### 📊 **Структурный анализ**
+```typescript
+interface StructuralAnalysis {
+  completeness: number;
+  sections: SectionAnalysis[];
+  missingElements: string[];
+  structuralIssues: StructuralIssue[];
+}
+
+interface SectionAnalysis {
+  name: string;
+  present: boolean;
+  quality: number;
+  content: string;
+  issues: string[];
+}
+```
+
+### Система промптов
+
+Приложение использует **модульную систему промптов** для различных типов анализа:
+
+```typescript
+// client/src/lib/gemini.ts
+const ANALYSIS_PROMPTS = {
+  checklist: `
+    Проанализируй договор на соответствие следующим требованиям:
+    {requirements}
+    
+    Договор: {contractText}
+    
+    Верни результат в JSON формате:
+    {
+      "requirements": [
+        {
+          "requirement": "название требования",
+          "status": "fulfilled|partial|missing|unclear",
+          "evidence": ["найденные подтверждения"],
+          "suggestions": ["рекомендации по улучшению"]
+        }
+      ],
+      "overallCompliance": число от 0 до 100,
+      "summary": "общий вывод"
+    }
+  `,
+  
+  risks: `
+    Проведи анализ рисков для следующего договора:
+    {contractText}
+    
+    Найди и оцени все потенциальные правовые, финансовые и операционные риски.
+    // ... детальный промпт для анализа рисков
+  `,
+  
+  structural: `
+    Проанализируй структуру и полноту договора:
+    {contractText}
+    
+    Оцени наличие всех необходимых разделов и элементов.
+    // ... детальный промпт для структурного анализа
+  `
+};
+```
+
+### Обработка ошибок
+
+```typescript
+// Многоуровневая система обработки ошибок
+class AnalysisError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public details?: any
+  ) {
+    super(message);
+  }
+}
+
+// Типы ошибок:
+// - VALIDATION_ERROR: Неверные входные данные
+// - AI_API_ERROR: Ошибка Google Gemini API
+// - PARSING_ERROR: Ошибка парсинга ответа ИИ
+// - STORAGE_ERROR: Ошибка сохранения результатов
+```
+
+### Кэширование и оптимизация
+
+```typescript
+// Кэширование результатов анализа
+const analysisCache = new Map<string, AnalysisResult>();
+
+const getCacheKey = (contractText: string, requirements: string[]) => {
+  return crypto
+    .createHash('sha256')
+    .update(contractText + JSON.stringify(requirements))
+    .digest('hex');
+};
+```
+
+### Экспорт результатов
+
+```typescript
+// client/src/lib/docx-export.ts
+export const exportToDocx = async (analysis: AnalysisResult) => {
+  const doc = new Document({
+    sections: [{
+      properties: {},
+      children: [
+        // Заголовок отчета
+        new Paragraph({
+          text: "Отчет об анализе договора",
+          heading: HeadingLevel.TITLE
+        }),
+        
+        // Результаты анализа
+        ...generateAnalysisContent(analysis),
+        
+        // Рекомендации
+        ...generateRecommendations(analysis.recommendations)
+      ]
+    }]
+  });
+  
+  return await Packer.toBlob(doc);
+};
+```
+
+### Безопасность
+
+- **Валидация входных данных** на клиенте и сервере
+- **Санитизация** текста договоров перед отправкой в ИИ
+- **Ограничение размера** загружаемых файлов
+- **Rate limiting** для API запросов
+- **Логирование** всех операций для аудита
+
 ## 🤝 Содействие
 
 Мы приветствуем вклад в развитие проекта! Пожалуйста:
