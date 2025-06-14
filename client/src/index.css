@@ -1,0 +1,207 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+:root {
+    --background: 0 0% 100%;
+    --foreground: 20 14.3% 4.1%;
+    --card: 0 0% 100%;
+    --card-foreground: 20 14.3% 4.1%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 14.3% 4.1%;
+    --primary: 24 9.8% 10%;
+    --primary-foreground: 60 9.1% 97.8%;
+    --secondary: 60 4.8% 95.9%;
+    --secondary-foreground: 24 9.8% 10%;
+    --muted: 60 4.8% 95.9%;
+    --muted-foreground: 25 5.3% 44.7%;
+    --accent: 60 4.8% 95.9%;
+    --accent-foreground: 24 9.8% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 60 9.1% 97.8%;
+    --border: 20 5.9% 90%;
+    --input: 20 5.9% 90%;
+    --ring: 20 14.3% 4.1%;
+  --radius: 0.5rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 20 14.3% 4.1%;
+    --sidebar-primary: 24 9.8% 10%;
+    --sidebar-primary-foreground: 60 9.1% 97.8%;
+    --sidebar-accent: 60 4.8% 95.9%;
+    --sidebar-accent-foreground: 24 9.8% 10%;
+    --sidebar-border: 20 5.9% 90%;
+    --sidebar-ring: 20 14.3% 4.1%;
+}
+
+.dark {
+    --background: 20 14.3% 4.1%;
+    --foreground: 60 9.1% 97.8%;
+    --card: 20 14.3% 4.1%;
+    --card-foreground: 60 9.1% 97.8%;
+    --popover: 20 14.3% 4.1%;
+    --popover-foreground: 60 9.1% 97.8%;
+    --primary: 60 9.1% 97.8%;
+    --primary-foreground: 24 9.8% 10%;
+    --secondary: 12 6.5% 15.1%;
+    --secondary-foreground: 60 9.1% 97.8%;
+    --muted: 12 6.5% 15.1%;
+    --muted-foreground: 24 5.4% 63.9%;
+    --accent: 12 6.5% 15.1%;
+    --accent-foreground: 60 9.1% 97.8%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 60 9.1% 97.8%;
+    --border: 12 6.5% 15.1%;
+    --input: 12 6.5% 15.1%;
+    --ring: 24 5.7% 82.9%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 12 6.5% 15.1%;
+    --sidebar-foreground: 60 9.1% 97.8%;
+    --sidebar-primary: 60 9.1% 97.8%;
+    --sidebar-primary-foreground: 24 9.8% 10%;
+    --sidebar-accent: 12 6.5% 15.1%;
+    --sidebar-accent-foreground: 60 9.1% 97.8%;
+    --sidebar-border: 12 6.5% 15.1%;
+    --sidebar-ring: 24 5.7% 82.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Цветовая схема для анализа */
+  .analysis-checklist {
+  background-color: #E6FFE6;
+  border-color: #4ADE80;
+  }
+  
+  .analysis-partial {
+  background-color: #FFF2CC;
+  border-color: #F59E0B;
+  }
+  
+  .analysis-risk {
+  background-color: #FFE6E6;
+  border-color: #EF4444;
+}
+
+.analysis-other {
+  background-color: #E6F3FF;
+  border-color: #3B82F6;
+  }
+  
+  .analysis-missing {
+  background-color: #FFF7ED;
+  border-color: #F97316;
+  }
+  
+/* Цвета для бренда Hugging Face */
+  .hf-orange-bg {
+  background-color: #FF6F00;
+  }
+  
+  .hf-orange-text {
+  color: #FF6F00;
+}
+
+/* Анимации для выпадающих панелей */
+.expand-enter {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+}
+
+.expand-enter-active {
+  max-height: 2000px;
+  opacity: 1;
+}
+
+.expand-exit {
+  max-height: 2000px;
+  opacity: 1;
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+}
+
+.expand-exit-active {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* Дополнительные стили для плавности */
+.transition-height {
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+.transition-opacity {
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hover эффекты для интерактивных элементов */
+.paragraph-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease-in-out;
+}
+
+/* Стили для кода в улучшенных формулировках */
+.improved-clause {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Стили для правовых ссылок */
+.legal-reference {
+  font-weight: 600;
+  color: #dc3545;
+}
+
+/* Индикаторы категорий */
+.category-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.category-indicator.checklist {
+  background-color: #22C55E;
+}
+
+.category-indicator.partial {
+  background-color: #F59E0B;
+}
+
+.category-indicator.risk {
+  background-color: #EF4444;
+}
+
+.category-indicator.other {
+  background-color: #3B82F6;
+}
+
+.category-indicator.missing {
+  background-color: #F97316;
+}
