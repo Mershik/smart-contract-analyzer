@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/smart-contract-analyzer.git"
+    "url": "https://github.com/Mershik/smart-contract-analyzer.git"
   },
   "keywords": ["contract", "analysis", "ai", "legal", "gemini", "typescript", "react"],
   "author": "Your Name",
