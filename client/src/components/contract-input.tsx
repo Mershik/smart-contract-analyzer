@@ -46,7 +46,7 @@ export function ContractInput({ value, onChange }: ContractInputProps) {
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
           <FileText className="hf-orange-text mr-2" size={20} />
-          Договор поставщика
+          Договор поставки
         </h3>
         <div className="flex items-center space-x-2">
           <input

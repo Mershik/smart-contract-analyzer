@@ -7,15 +7,15 @@ export async function exportToDocx(paragraphs: ContractParagraph[]) {
 
     const docxParagraphs = paragraphs.map((paragraph) => {
       const backgroundColor = paragraph.category === 'checklist' 
-        ? 'E6FFE6' 
+        ? 'DCFCE7' 
         : paragraph.category === 'partial'
-        ? 'FFF3CD'
+        ? 'FEF3C7'
         : paragraph.category === 'risk' 
-        ? 'FFE6E6' 
+        ? 'FEE2E2' 
         : paragraph.category === 'missing'
-        ? 'FFE6CC'
-        : paragraph.category === 'other'
-        ? 'FFF2CC'
+        ? 'FDF2F8'
+        : paragraph.category === 'other' || paragraph.category === 'ambiguous'
+        ? 'E0E7FF'
         : 'FFFFFF';
 
       return new Paragraph({
@@ -46,15 +46,15 @@ export async function exportToDocx(paragraphs: ContractParagraph[]) {
             style: BorderStyle.SINGLE,
             size: 6,
             color: paragraph.category === 'checklist' 
-              ? '00AA00' 
+              ? '16A34A' 
               : paragraph.category === 'partial'
-              ? 'FFAA00'
+              ? 'D97706'
               : paragraph.category === 'risk' 
-              ? 'CC0000' 
+              ? 'DC2626' 
               : paragraph.category === 'missing'
-              ? 'FF8800'
-              : paragraph.category === 'other'
-              ? 'CCAA00'
+              ? 'EC4899'
+              : paragraph.category === 'other' || paragraph.category === 'ambiguous'
+              ? '6366F1'
               : '666666',
           },
         },

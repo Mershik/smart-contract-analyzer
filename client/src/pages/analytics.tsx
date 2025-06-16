@@ -4,7 +4,7 @@ import { AnalyticsDashboard } from "@/components/analytics-dashboard";
 
 export default function Analytics() {
   const handleBack = () => {
-    window.history.back();
+    window.close();
   };
 
   return (

@@ -19,15 +19,15 @@ export function ExpandableParagraph({ paragraph, onToggle }: ExpandableParagraph
   const getCategoryColor = (category?: string) => {
     switch (category) {
       case 'checklist':
-        return 'bg-green-50 border-l-4 border-l-green-400 hover:bg-green-100';
+        return 'bg-green-50 border-l-4 border-l-green-600 hover:bg-green-100';
       case 'partial':
-        return 'bg-amber-50 border-l-4 border-l-amber-400 hover:bg-amber-100';
+        return 'bg-amber-50 border-l-4 border-l-amber-600 hover:bg-amber-100';
       case 'risk':
-        return 'bg-red-50 border-l-4 border-l-red-400 hover:bg-red-100';
+        return 'bg-red-50 border-l-4 border-l-red-600 hover:bg-red-100';
       case 'ambiguous':
-        return 'bg-yellow-50 border-l-4 border-l-yellow-400 hover:bg-yellow-100';
+        return 'bg-indigo-50 border-l-4 border-l-indigo-600 hover:bg-indigo-100';
       case 'other':
-        return 'bg-blue-50 border-l-4 border-l-blue-400 hover:bg-blue-100';
+        return 'bg-indigo-50 border-l-4 border-l-indigo-600 hover:bg-indigo-100';
       default:
         return 'bg-gray-50 border-l-4 border-l-gray-300 hover:bg-gray-100';
     }

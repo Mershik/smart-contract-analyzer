@@ -85,37 +85,37 @@
 }
 
 /* Цветовая схема для анализа */
-  .analysis-checklist {
-  background-color: #E6FFE6;
-  border-color: #4ADE80;
-  }
-  
-  .analysis-partial {
-  background-color: #FFF2CC;
-  border-color: #F59E0B;
-  }
-  
-  .analysis-risk {
-  background-color: #FFE6E6;
-  border-color: #EF4444;
+.analysis-checklist {
+  background-color: #DCFCE7;
+  border-color: #16A34A;
+}
+
+.analysis-partial {
+  background-color: #FEF3C7;
+  border-color: #D97706;
+}
+
+.analysis-risk {
+  background-color: #FEE2E2;
+  border-color: #DC2626;
 }
 
 .analysis-other {
-  background-color: #E6F3FF;
-  border-color: #3B82F6;
-  }
-  
-  .analysis-missing {
-  background-color: #FFF7ED;
-  border-color: #F97316;
-  }
-  
+  background-color: #E0E7FF;
+  border-color: #6366F1;
+}
+
+.analysis-missing {
+  background-color: #FDF2F8;
+  border-color: #EC4899;
+}
+
 /* Цвета для бренда Hugging Face */
-  .hf-orange-bg {
+.hf-orange-bg {
   background-color: #FF6F00;
-  }
-  
-  .hf-orange-text {
+}
+
+.hf-orange-text {
   color: #FF6F00;
 }
 
@@ -147,7 +147,7 @@
 /* Дополнительные стили для плавности */
 .transition-height {
   transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
+}
 
 .transition-opacity {
   transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -187,21 +187,21 @@
 }
 
 .category-indicator.checklist {
-  background-color: #22C55E;
+  background-color: #16A34A;
 }
 
 .category-indicator.partial {
-  background-color: #F59E0B;
+  background-color: #D97706;
 }
 
 .category-indicator.risk {
-  background-color: #EF4444;
+  background-color: #DC2626;
 }
 
 .category-indicator.other {
-  background-color: #3B82F6;
+  background-color: #6366F1;
 }
 
 .category-indicator.missing {
-  background-color: #F97316;
+  background-color: #EC4899;
 }
