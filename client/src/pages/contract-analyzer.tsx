@@ -1,16 +1,18 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { File, ChartLine } from "lucide-react";
 import { ContractInput } from "@/components/contract-input";
 import { RequirementsInput } from "@/components/requirements-input";
 import { RiskInput } from "@/components/risk-input";
 import { AnalysisResults } from "@/components/analysis-results";
-import { SidebarFilters, type AnalysisPerspective } from "@/components/sidebar-filters";
 import { AnalysisProgress } from "@/components/analysis-progress";
 import { StructuralAnalysisComponent } from "@/components/structural-analysis";
 import { Button } from "@/components/ui/button";
 import { useGeminiAnalysis } from "@/hooks/use-gemini-analysis";
 import { exportToDocx } from "@/lib/docx-export";
-import type { ContractParagraph } from "@shared/schema";
+import type { ContractParagraph, Contradiction } from "@shared/schema";
+import { ContradictionsResults } from "@/components/contradictions-results";
+import { SidebarFilters } from "@/components/sidebar-filters";
+import { AnalysisPerspective } from "@/components/perspective-selector";
 
 // Требования и риски для ПОКУПАТЕЛЯ
 const buyerChecklist = `•	Определение товара: Порядок согласования наименования, количества, ассортимента и цены товара определяется через Заявки Покупателя, подтверждаемые Счетами/Спецификациями Поставщика.
@@ -231,14 +233,16 @@ export default function ContractAnalyzer() {
   const [missingRequirements, setMissingRequirements] = useState<ContractParagraph[]>([]);
   const [ambiguousConditions, setAmbiguousConditions] = useState<ContractParagraph[]>([]);
   const [structuralAnalysis, setStructuralAnalysis] = useState<any>(null);
+  const [contradictions, setContradictions] = useState<Contradiction[]>([]);
   const [showCompliance, setShowCompliance] = useState(true);
   const [showPartial, setShowPartial] = useState(true);
   const [showRisks, setShowRisks] = useState(true);
   const [showMissing, setShowMissing] = useState(true);
   const [showOther, setShowOther] = useState(true);
+  const [showContradictions, setShowContradictions] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const { analyzeContract, isLoading, error } = useGeminiAnalysis();
+  const { analyzeContract, isLoading, error, progress } = useGeminiAnalysis();
   
   // Ссылка на раздел структурного анализа для автоматической прокрутки
   const structuralAnalysisRef = useRef<HTMLDivElement>(null);
@@ -270,7 +274,9 @@ export default function ContractAnalyzer() {
     setMissingRequirements([]);
     setAmbiguousConditions([]);
     setStructuralAnalysis(null);
-    // Автоматически обновляем чек-лист и риски при смене перспективы
+    setContradictions([]);
+    
+    // Обновляем чек-лист и риски в зависимости от перспективы
     if (newPerspective === 'buyer') {
       setChecklistText(buyerChecklist);
       setRiskText(buyerRisks);
@@ -289,17 +295,21 @@ export default function ContractAnalyzer() {
     setIsAnalyzing(true);
     
     try {
-      const { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis } = await analyzeContract(
+      const { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions } = await analyzeContract(
         contractText,
         checklistText,
         riskText,
-        perspective
+        perspective,
+        (progressMessage: string) => {
+          console.log("Progress:", progressMessage);
+        }
       );
       
       setContractParagraphs(contractParagraphs || []);
       setMissingRequirements(missingRequirements || []);
       setAmbiguousConditions(ambiguousConditions || []);
       setStructuralAnalysis(structuralAnalysis || null);
+      setContradictions(contradictions || []);
       
       // Успешное завершение - останавливаем анализ
       setIsAnalyzing(false);
@@ -471,17 +481,20 @@ export default function ContractAnalyzer() {
             showRisks={showRisks}
             showMissing={showMissing}
             showOther={showOther}
+            showContradictions={showContradictions}
             onToggleCompliance={setShowCompliance}
             onTogglePartial={setShowPartial}
             onToggleRisks={setShowRisks}
             onToggleMissing={setShowMissing}
             onToggleOther={setShowOther}
+            onToggleContradictions={setShowContradictions}
             hasResults={contractParagraphs.length > 0}
             complianceCount={complianceCount}
             partialCount={partialCount}
             riskCount={riskCount}
             missingCount={missingCountTotal}
             otherCount={otherCount}
+            contradictionsCount={contradictions.length}
           />
         </div>
 
@@ -525,12 +538,21 @@ export default function ContractAnalyzer() {
             />
           </div>
         )}
+
+        {/* Contradictions Results */}
+        <div className="mt-6">
+          <ContradictionsResults
+            contradictions={contradictions}
+            showContradictions={showContradictions}
+          />
+        </div>
       </div>
 
       {/* Analysis Progress */}
       <AnalysisProgress 
         isAnalyzing={isAnalyzing} 
         onComplete={handleAnalysisComplete}
+        progress={progress}
       />
 
       {/* Footer */}

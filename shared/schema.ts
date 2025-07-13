@@ -35,7 +35,7 @@ export type InsertContractAnalysis = z.infer<typeof insertContractAnalysisSchema
 export const analysisItemSchema = z.object({
   id: z.string(),
   status: z.string(),
-  category: z.enum(['checklist', 'risk', 'missing', 'other', 'partial', 'ambiguous']),
+  category: z.enum(['checklist', 'risk', 'missing', 'other', 'partial', 'ambiguous', 'contradiction']),
   comment: z.string(),
 });
 
@@ -49,12 +49,31 @@ export type AnalysisResponse = z.infer<typeof analysisResponseSchema>;
 export interface ContractParagraph {
   id: string;
   text: string;
-  category?: 'checklist' | 'risk' | 'missing' | 'other' | 'partial' | 'ambiguous';
+  category?: 'checklist' | 'risk' | 'missing' | 'other' | 'partial' | 'ambiguous' | 'contradiction';
   comment?: string;
   recommendation?: string;
   improvedClause?: string;
   legalRisk?: string;
   isExpanded?: boolean;
+}
+
+// Новый тип для противоречий
+export interface Contradiction {
+  id: string;
+  type: 'temporal' | 'financial' | 'quantitative' | 'legal';
+  description: string;
+  conflictingParagraphs: {
+    paragraph1: {
+      text: string;
+      value: string;
+    };
+    paragraph2: {
+      text: string;
+      value: string;
+    };
+  };
+  severity: 'high' | 'medium' | 'low';
+  recommendation: string;
 }
 
 export interface StructuralAnalysis {

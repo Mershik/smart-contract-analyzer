@@ -149,7 +149,7 @@ ${JSON.stringify(paragraphs)}
 • Положения с непредвиденными юридическими/коммерческими последствиями для ${perspectiveContext.role}`;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const response = await model.generateContent(`${systemPrompt}\n\n${userPrompt}`);
 
     const responseText = response.response.text() || "";

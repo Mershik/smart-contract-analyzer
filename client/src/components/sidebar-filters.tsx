@@ -10,17 +10,20 @@ interface SidebarFiltersProps {
   showRisks: boolean;
   showMissing: boolean;
   showOther: boolean;
+  showContradictions: boolean;
   onToggleCompliance: (checked: boolean) => void;
   onTogglePartial?: (checked: boolean) => void;
   onToggleRisks: (checked: boolean) => void;
   onToggleMissing: (checked: boolean) => void;
   onToggleOther: (checked: boolean) => void;
+  onToggleContradictions: (checked: boolean) => void;
   hasResults: boolean;
   complianceCount: number;
   partialCount?: number;
   riskCount: number;
   missingCount: number;
   otherCount: number;
+  contradictionsCount: number;
   perspective: AnalysisPerspective;
   onPerspectiveChange: (perspective: AnalysisPerspective) => void;
 }
@@ -31,17 +34,20 @@ export function SidebarFilters({
   showRisks,
   showMissing,
   showOther,
+  showContradictions,
   onToggleCompliance,
   onTogglePartial,
   onToggleRisks,
   onToggleMissing,
   onToggleOther,
+  onToggleContradictions,
   hasResults,
   complianceCount,
   partialCount,
   riskCount,
   missingCount,
   otherCount,
+  contradictionsCount,
   perspective,
   onPerspectiveChange,
 }: SidebarFiltersProps) {
@@ -140,6 +146,21 @@ export function SidebarFilters({
               onCheckedChange={onToggleRisks}
             />
           </div>
+
+          {/* Противоречия */}
+          {contradictionsCount > 0 && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-4 h-4 bg-purple-50 border border-purple-300 rounded"></div>
+                <span className="text-sm text-gray-700">Противоречия ({contradictionsCount})</span>
+              </div>
+              <Checkbox
+                id="show-contradictions"
+                checked={showContradictions}
+                onCheckedChange={onToggleContradictions}
+              />
+            </div>
+          )}
 
           {/* Отсутствует в договоре */}
           {missingCount > 0 && (

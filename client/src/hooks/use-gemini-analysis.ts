@@ -1,27 +1,45 @@
 import { useState } from "react";
 import { analyzeContractWithGemini } from "@/lib/gemini";
-import type { ContractParagraph,  StructuralAnalysis} from "@shared/schema";
+import type { ContractParagraph,  StructuralAnalysis, Contradiction} from "@shared/schema";
 
 export function useGeminiAnalysis() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string>("");
 
   const analyzeContract = async (
     contractText: string,
     checklistText: string,
     riskText: string,
-    perspective: 'buyer' | 'supplier' = 'buyer'
+    perspective: 'buyer' | 'supplier' = 'buyer',
+    onProgress?: (message: string) => void
   ): Promise<{ 
     contractParagraphs: ContractParagraph[], 
     missingRequirements: ContractParagraph[], 
     ambiguousConditions: ContractParagraph[],
-    structuralAnalysis: StructuralAnalysis
+    structuralAnalysis: StructuralAnalysis,
+    contradictions: Contradiction[]
   }> => {
     setIsLoading(true);
     setError(null);
+    setProgress("");
+
+    // Внутренняя функция для обработки прогресса
+    const handleProgress = (message: string) => {
+      setProgress(message);
+      if (onProgress) {
+        onProgress(message);
+      }
+    };
 
     try {
-      const { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis } = await analyzeContractWithGemini(contractText, checklistText, riskText, perspective);
+      const { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions } = await analyzeContractWithGemini(
+        contractText, 
+        checklistText, 
+        riskText, 
+        perspective,
+        handleProgress // Передаем колбэк для индикатора прогресса
+      );
       
       // Сохраняем результат анализа на сервере
       try {
@@ -32,7 +50,7 @@ export function useGeminiAnalysis() {
           },
           body: JSON.stringify({
             contractText,
-            analysisResult: { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis },
+            analysisResult: { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions },
           }),
         });
       } catch (saveError) {
@@ -40,13 +58,14 @@ export function useGeminiAnalysis() {
         // Не прерываем выполнение, если сохранение не удалось
       }
       
-      return { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis };
+      return { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Analysis failed";
       setError(errorMessage);
       throw err;
     } finally {
       setIsLoading(false);
+      setProgress("");
     }
   };
 
@@ -54,5 +73,6 @@ export function useGeminiAnalysis() {
     analyzeContract,
     isLoading,
     error,
+    progress,
   };
 }

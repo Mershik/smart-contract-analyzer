@@ -36,14 +36,8 @@ export function AnalysisResults({
     exportToDocx();
   };
 
-  // Фильтруем абзацы для отображения
-  const visibleParagraphs = contractParagraphs.filter(paragraph => {
-    if (!showCompliance && paragraph.category === 'checklist') return false;
-    if (!showPartial && paragraph.category === 'partial') return false;
-    if (!showRisks && paragraph.category === 'risk') return false;
-    if (!showOther && (paragraph.category === 'other' || paragraph.category === 'ambiguous')) return false;
-    return true;
-  });
+  // Теперь показываем все абзацы, а фильтрация будет через стили
+  const visibleParagraphs = contractParagraphs;
 
   return (
     <div className="space-y-6">
@@ -79,6 +73,10 @@ export function AnalysisResults({
             <ExpandableParagraph
               key={paragraph.id}
               paragraph={paragraph}
+              showCompliance={showCompliance}
+              showPartial={showPartial}
+              showRisks={showRisks}
+              showOther={showOther}
               onToggle={(id) => {
                 // Здесь можно добавить логику для обработки расширения/сворачивания
                 console.log(`Toggled paragraph ${id}`);

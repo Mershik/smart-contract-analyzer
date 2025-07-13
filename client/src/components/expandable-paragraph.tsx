@@ -4,10 +4,21 @@ import type { ContractParagraph } from "@shared/schema";
 
 interface ExpandableParagraphProps {
   paragraph: ContractParagraph;
+  showCompliance?: boolean;
+  showPartial?: boolean;
+  showRisks?: boolean;
+  showOther?: boolean;
   onToggle?: (id: string) => void;
 }
 
-export function ExpandableParagraph({ paragraph, onToggle }: ExpandableParagraphProps) {
+export function ExpandableParagraph({ 
+  paragraph, 
+  showCompliance = true,
+  showPartial = true,
+  showRisks = true,
+  showOther = true,
+  onToggle 
+}: ExpandableParagraphProps) {
   const [isExpanded, setIsExpanded] = useState(paragraph.isExpanded || false);
 
   const handleToggle = () => {
@@ -17,6 +28,29 @@ export function ExpandableParagraph({ paragraph, onToggle }: ExpandableParagraph
   };
 
   const getCategoryColor = (category?: string) => {
+    // Проверяем, включен ли фильтр для данной категории
+    const isFilterActive = () => {
+      switch (category) {
+        case 'checklist':
+          return showCompliance;
+        case 'partial':
+          return showPartial;
+        case 'risk':
+          return showRisks;
+        case 'ambiguous':
+        case 'other':
+          return showOther;
+        default:
+          return true;
+      }
+    };
+
+    // Если фильтр выключен, возвращаем стиль по умолчанию (как для нейтральных элементов)
+    if (!isFilterActive()) {
+      return 'bg-gray-50 border-l-4 border-l-gray-300 hover:bg-gray-100';
+    }
+
+    // Если фильтр включен, возвращаем обычные цвета
     switch (category) {
       case 'checklist':
         return 'bg-green-50 border-l-4 border-l-green-600 hover:bg-green-100';

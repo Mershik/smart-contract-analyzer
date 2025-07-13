@@ -1,30 +1,513 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { analysisResponseSchema, type ContractParagraph, type AnalysisResponse } from "@shared/schema";
 
-let API_KEY = "";
-const MODEL_NAME = 'gemini-2.0-flash';
+const MODEL_NAME = 'gemini-2.5-flash';
 
-// Функция для получения ключа API
-async function getApiKey() {
-  if (API_KEY) return API_KEY;
-  try {
-    console.log('Fetching API key from server...');
-    const response = await fetch('/api/gemini-key');
-    if (!response.ok) {
-      throw new Error(`Failed to fetch API key: ${response.status} ${response.statusText}`);
+// Пул API ключей с механизмом round-robin
+class ApiKeyPool {
+  private keys: string[] = [];
+  private currentIndex = 0;
+  private keyUsageCount: Map<string, number> = new Map();
+  private exhaustedKeys: Set<string> = new Set();
+
+  constructor() {
+    const apiKeyEnv = import.meta.env.VITE_API_KEY;
+    if (!apiKeyEnv) {
+      throw new Error("VITE_API_KEY не установлен");
     }
-    const data = await response.json();
-    if (!data.apiKey) {
-      throw new Error('API key not found in server response');
+    
+    // Поддержка нескольких ключей через запятую
+    this.keys = apiKeyEnv.split(',').map((key: string) => key.trim()).filter((key: string) => key.length > 0);
+    
+    if (this.keys.length === 0) {
+      throw new Error("Не найдено валидных API ключей");
     }
-    API_KEY = data.apiKey;
-    console.log('API key successfully retrieved');
-    return API_KEY;
-  } catch (error) {
-    console.error('Error fetching API key:', error);
-    throw new Error('Gemini API key is not configured');
+    
+    // Инициализируем счетчики использования
+    this.keys.forEach(key => {
+      this.keyUsageCount.set(key, 0);
+    });
+    
+    console.log(`🔑 Инициализирован пул из ${this.keys.length} API ключей`);
+  }
+
+  getNextKey(): string {
+    // Проверяем, есть ли доступные ключи
+    const availableKeys = this.keys.filter(key => !this.exhaustedKeys.has(key));
+    
+    if (availableKeys.length === 0) {
+      throw new Error("Все API ключи исчерпали свои квоты");
+    }
+    
+    // Находим индекс следующего доступного ключа
+    let attempts = 0;
+    while (attempts < this.keys.length) {
+      const key = this.keys[this.currentIndex];
+      this.currentIndex = (this.currentIndex + 1) % this.keys.length;
+      
+      if (!this.exhaustedKeys.has(key)) {
+        const currentCount = this.keyUsageCount.get(key) || 0;
+        this.keyUsageCount.set(key, currentCount + 1);
+        console.log(`🔑 Использую ключ ${key.substring(0, 10)}... (использован ${currentCount + 1} раз, доступно ${this.getAvailableKeyCount()}/${this.getKeyCount()})`);
+        return key;
+      }
+      
+      attempts++;
+    }
+    
+    throw new Error("Не удалось найти доступный API ключ");
+  }
+
+  markKeyAsExhausted(key: string): void {
+    this.exhaustedKeys.add(key);
+    console.warn(`⚠️ Ключ ${key.substring(0, 10)}... помечен как исчерпанный`);
+  }
+
+  getKeyCount(): number {
+    return this.keys.length;
+  }
+
+  getAvailableKeyCount(): number {
+    return this.keys.length - this.exhaustedKeys.size;
+  }
+
+  getKeyUsageCount(key: string): number {
+    return this.keyUsageCount.get(key) || 0;
   }
 }
+
+// Глобальный пул ключей
+const keyPool = new ApiKeyPool();
+
+// Функция для извлечения JSON из "грязного" ответа
+function extractJsonFromResponse(rawResponse: string): any {
+  console.log("🔍 Обработка сырого ответа:", rawResponse.substring(0, 200));
+  
+  // Проверка на пустой ответ
+  if (!rawResponse || rawResponse.trim().length === 0) {
+    console.warn("⚠️ Получен пустой ответ от Gemini API");
+    return {
+      chunkId: "unknown",
+      analysis: []
+    };
+  }
+  
+  let cleanedResponse = rawResponse.trim();
+  
+  // Удаляем markdown блоки
+  if (cleanedResponse.includes('```json')) {
+    const jsonMatch = cleanedResponse.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      cleanedResponse = jsonMatch[1].trim();
+    }
+  } else if (cleanedResponse.includes('```')) {
+    const codeMatch = cleanedResponse.match(/```\s*([\s\S]*?)\s*```/);
+    if (codeMatch) {
+      cleanedResponse = codeMatch[1].trim();
+    }
+  }
+  
+  // Очищаем проблемные символы
+  cleanedResponse = cleanedResponse
+    .replace(/\t/g, ' ')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\u2028/g, ' ')
+    .replace(/\u2029/g, ' ')
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ');
+  
+  // Попытка парсинга
+  try {
+    return JSON.parse(cleanedResponse);
+  } catch (error) {
+    console.error("❌ Ошибка парсинга JSON:", error);
+    console.log("📝 Исходный ответ длиной:", rawResponse.length);
+    
+    // Попытка восстановить обрезанный JSON
+    let repairedJson = cleanedResponse;
+    
+    // Если JSON обрезан в середине строки, пытаемся закрыть её
+    if (repairedJson.includes('"') && !repairedJson.endsWith('"')) {
+      const lastQuoteIndex = repairedJson.lastIndexOf('"');
+      const afterLastQuote = repairedJson.substring(lastQuoteIndex + 1);
+      
+      // Если после последней кавычки нет закрывающих символов, добавляем их
+      if (!afterLastQuote.includes('"') && !afterLastQuote.includes('}')) {
+        repairedJson = repairedJson.substring(0, lastQuoteIndex + 1) + '"';
+        console.log("🔧 Попытка закрыть обрезанную строку");
+      }
+    }
+    
+    // Добавляем недостающие закрывающие скобки
+    let openBrackets = 0;
+    let openBraces = 0;
+    
+    for (let i = 0; i < repairedJson.length; i++) {
+      if (repairedJson[i] === '{') openBraces++;
+      else if (repairedJson[i] === '}') openBraces--;
+      else if (repairedJson[i] === '[') openBrackets++;
+      else if (repairedJson[i] === ']') openBrackets--;
+    }
+    
+    // Добавляем недостающие закрывающие символы
+    while (openBrackets > 0) {
+      repairedJson += ']';
+      openBrackets--;
+    }
+    while (openBraces > 0) {
+      repairedJson += '}';
+      openBraces--;
+    }
+    
+    // Убираем trailing commas перед закрывающими скобками
+    repairedJson = repairedJson
+      .replace(/,\s*}/g, '}')
+      .replace(/,\s*]/g, ']');
+    
+    console.log("🔧 Попытка восстановления JSON:", repairedJson.substring(0, 300));
+    
+    try {
+      return JSON.parse(repairedJson);
+    } catch (secondError) {
+      console.error("❌ Вторая попытка парсинга провалена:", secondError);
+      
+      // Попытка найти хотя бы частичный валидный JSON
+      const jsonMatches = rawResponse.match(/{[^}]*"chunkId"[^}]*}/g);
+      if (jsonMatches && jsonMatches.length > 0) {
+        console.log("🔍 Найден частичный JSON с chunkId");
+        for (const jsonMatch of jsonMatches) {
+          try {
+            const partial = JSON.parse(jsonMatch + ', "analysis": []}');
+            return partial;
+          } catch (e) {
+            continue;
+          }
+        }
+      }
+      
+      // Последний fallback - возвращаем пустой результат
+      console.warn("⚠️ Возвращаем пустой результат для данного чанка");
+      return {
+        chunkId: "failed",
+        analysis: []
+      };
+    }
+  }
+}
+
+// Создание больших чанков для максимального использования лимита 8000 токенов
+function createChunks(paragraphs: Array<{ id: string; text: string }>, chunkSize: number = 15): Array<{ id: string; paragraphs: Array<{ id: string; text: string }> }> {
+  const chunks: Array<{ id: string; paragraphs: Array<{ id: string; text: string }> }> = [];
+  
+  for (let i = 0; i < paragraphs.length; i += chunkSize) {
+    const chunkParagraphs = paragraphs.slice(i, i + chunkSize);
+    chunks.push({
+      id: `chunk_${Math.floor(i / chunkSize) + 1}`,
+      paragraphs: chunkParagraphs
+    });
+  }
+  
+  console.log(`📦 Создано ${chunks.length} больших чанков по ${chunkSize} абзацев`);
+  return chunks;
+}
+
+// Анализ одного чанка с обработкой ошибок 429
+async function analyzeChunk(
+  chunk: { id: string; paragraphs: Array<{ id: string; text: string }> },
+  checklistText: string,
+  riskText: string,
+  perspective: 'buyer' | 'supplier'
+): Promise<any> {
+  const maxRetries = 3;
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const keyToUse = keyPool.getNextKey();
+    
+    try {
+      const genAI = new GoogleGenerativeAI(keyToUse);
+      const model = genAI.getGenerativeModel({ 
+        model: MODEL_NAME,
+        systemInstruction: `Ты - эксперт по анализу договоров поставки в России. Анализируй договоры с точки зрения ${perspective === 'buyer' ? 'Покупателя' : 'Поставщика'}.`
+      });
+
+      const perspectiveContext = perspective === 'buyer'
+        ? { role: 'Покупателя', beneficiary: 'покупателя' }
+        : { role: 'Поставщика', beneficiary: 'поставщика' };
+
+      const chunkPrompt = `Анализ для ${perspectiveContext.role}. Категории:
+"checklist" - полностью соответствует требованиям (БЕЗ комментариев и рекомендаций)
+"partial" - частично соответствует требованиям (с комментариями)
+"risk" - содержит риски для ${perspectiveContext.beneficiary} (с комментариями)  
+"ambiguous" - неоднозначные условия ("своевременно", "по усмотрению", "иные расходы")
+null - остальные пункты
+
+ВАЖНО: Если обнаружишь противоречия в абзаце с другими частями договора (разные сроки, суммы, условия), обязательно укажи это в комментарии! Например: "ПРОТИВОРЕЧИЕ: Здесь указан срок 10 дней, но в п.5.2 указано 5 дней для того же процесса"
+
+Абзацы: ${JSON.stringify(chunk.paragraphs)}
+
+JSON:
+{
+  "chunkId": "${chunk.id}",
+  "analysis": [
+    {
+      "id": "p1", 
+      "category": "checklist",
+      "comment": null,
+      "recommendation": null
+    },
+    {
+      "id": "p2", 
+      "category": "risk",
+      "comment": "Краткое описание риска",
+      "recommendation": "Краткая рекомендация"
+    }
+  ]
+}`;
+
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: chunkPrompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
+          maxOutputTokens: 8000, // Максимально используем лимит API
+          topP: 0.95,
+          topK: 64,
+        },
+        safetySettings: [
+          {
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+        ],
+      });
+
+      // Проверяем причину завершения
+      const finishReason = result.response?.candidates?.[0]?.finishReason;
+      if (finishReason && finishReason !== 'STOP') {
+        console.warn(`⚠️ ${chunk.id}: Нестандартное завершение - ${finishReason}`);
+        
+        if (finishReason === 'MAX_TOKENS') {
+          console.warn(`⚠️ ${chunk.id}: Ответ обрезан из-за лимита токенов`);
+        }
+      }
+
+      const rawResponse = result.response.text();
+      console.log(`📝 Сырой ответ для ${chunk.id}:`, rawResponse.substring(0, 300));
+      
+      return extractJsonFromResponse(rawResponse);
+      
+    } catch (error: any) {
+      lastError = error;
+      
+      // Проверяем, является ли это ошибкой 429 (квота исчерпана)
+      if (error.message && error.message.includes('429') && error.message.includes('Resource has been exhausted')) {
+        console.warn(`⚠️ ${chunk.id}: Ключ ${keyToUse.substring(0, 10)}... исчерпал квоту, пробуем следующий`);
+        keyPool.markKeyAsExhausted(keyToUse);
+        
+        // Если есть доступные ключи, пробуем еще раз
+        if (keyPool.getAvailableKeyCount() > 0) {
+          console.log(`🔄 ${chunk.id}: Повторная попытка с другим ключом (попытка ${attempt + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Пауза перед повторной попыткой
+          continue;
+        } else {
+          console.error(`❌ ${chunk.id}: Все ключи исчерпали квоты`);
+          throw error;
+        }
+      }
+      
+      // Для других ошибок делаем простую повторную попытку
+      console.warn(`⚠️ ${chunk.id}: Ошибка (попытка ${attempt + 1}/${maxRetries}):`, error.message);
+      if (attempt < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // Увеличиваем задержку
+      }
+    }
+  }
+  
+  throw lastError || new Error(`Не удалось обработать чанк ${chunk.id} после ${maxRetries} попыток`);
+}
+
+// Пакетная обработка чанков по 4 за раз
+async function processChunksSequentially(
+  chunks: Array<{ id: string; paragraphs: Array<{ id: string; text: string }> }>,
+  checklistText: string,
+  riskText: string,
+  perspective: 'buyer' | 'supplier',
+  onProgress: (message: string) => void
+): Promise<any[]> {
+  const results: any[] = [];
+  
+  console.log(`📋 Начинаем последовательную обработку ${chunks.length} больших чанков`);
+  
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const chunkNumber = i + 1;
+    
+    onProgress(`Анализ чанка ${chunkNumber} из ${chunks.length} (${chunk.paragraphs.length} абзацев)`);
+    
+    try {
+      console.log(`🔍 Обрабатываем чанк ${chunkNumber}: ${chunk.paragraphs.length} абзацев`);
+      const chunkResult: any = await analyzeChunk(chunk, checklistText, riskText, perspective);
+      results.push(chunkResult);
+      
+      // Пауза между чанками для стабильности
+      if (i < chunks.length - 1) {
+        const availableKeys = keyPool.getAvailableKeyCount();
+        const delay = availableKeys > 8 ? 1000 : availableKeys > 4 ? 2000 : 3000;
+        console.log(`⏱️ Пауза ${delay}ms между чанками (доступно ключей: ${availableKeys})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    } catch (error) {
+      console.error(`❌ Ошибка в чанке ${chunkNumber}:`, error);
+      throw error;
+    }
+  }
+  
+  return results;
+}
+
+// Сводный структурный анализ
+async function performStructuralAnalysis(
+  contractText: string,
+  chunkResults: any[],
+  perspective: 'buyer' | 'supplier',
+  onProgress: (message: string) => void
+): Promise<any> {
+  onProgress("Выполняется структурный анализ договора...");
+  
+  const keyToUse = keyPool.getNextKey();
+  const genAI = new GoogleGenerativeAI(keyToUse);
+  const model = genAI.getGenerativeModel({ 
+    model: MODEL_NAME,
+    systemInstruction: `Ты - эксперт по анализу договоров поставки в России. Анализируй договоры с точки зрения ${perspective === 'buyer' ? 'Покупателя' : 'Поставщика'}.`
+  });
+
+  const structuralPrompt = `Сделай краткую сводку анализа договора для ${perspective === 'buyer' ? 'Покупателя' : 'Поставщика'}.
+
+РЕЗУЛЬТАТЫ АНАЛИЗА АБЗАЦЕВ:
+${JSON.stringify(chunkResults, null, 2)}
+
+Верни JSON с краткой сводкой:
+{
+  "structuralAnalysis": {
+    "overallAssessment": "Краткая общая оценка договора (1-2 предложения)",
+    "keyRisks": ["Основной риск 1", "Основной риск 2"],
+    "structureComments": "Краткий комментарий по структуре",
+    "legalCompliance": "Соответствует базовым требованиям российского законодательства",
+    "recommendations": ["Ключевая рекомендация 1", "Ключевая рекомендация 2"]
+  }
+}`;
+
+  const result = await model.generateContent({
+    contents: [{ role: "user", parts: [{ text: structuralPrompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.1,
+      maxOutputTokens: 8000,
+      topP: 0.95,
+      topK: 64,
+    },
+    safetySettings: [
+      {
+        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
+      },
+    ],
+  });
+
+  const rawResponse = result.response.text();
+  console.log("📊 Сырой ответ структурного анализа:", rawResponse.substring(0, 300));
+  
+  return extractJsonFromResponse(rawResponse);
+}
+
+// Поиск отсутствующих требований
+async function findMissingRequirements(
+  contractText: string,
+  checklistText: string,
+  foundConditions: string[],
+  perspective: 'buyer' | 'supplier',
+  onProgress: (message: string) => void
+): Promise<any> {
+  onProgress("Поиск отсутствующих требований...");
+  
+  const keyToUse = keyPool.getNextKey();
+  console.log(`🔑 Использую ключ ${keyToUse.substring(0, 10)}... (использован ${keyPool.getKeyUsageCount(keyToUse)} раз, доступно ${keyPool.getAvailableKeyCount()}/${keyPool.getKeyCount()})`);
+  
+  const genAI = new GoogleGenerativeAI(keyToUse);
+  const model = genAI.getGenerativeModel({ 
+    model: MODEL_NAME,
+    systemInstruction: `Ты - эксперт по анализу договоров поставки в России. Анализируй договоры с точки зрения ${perspective === 'buyer' ? 'Покупателя' : 'Поставщика'}.`
+  });
+
+  const missingPrompt = `Найди 3-5 самых важных отсутствующих требований, сравнив чек-лист с выполненными условиями.
+
+ПОЛНЫЙ ЧЕК-ЛИСТ:
+${checklistText}
+
+УЖЕ ПОЛНОСТЬЮ ВЫПОЛНЕННЫЕ УСЛОВИЯ (всего ${foundConditions.length}):
+${foundConditions.join(', ')}
+
+Верни JSON с 3-5 самыми важными отсутствующими требованиями:
+{
+  "missingRequirements": [
+    {
+      "requirement": "Краткое название",
+      "comment": "Короткое объяснение важности"
+    }
+  ]
+}`;
+
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: missingPrompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1,
+        maxOutputTokens: 8000,
+        topP: 0.95,
+        topK: 64,
+      },
+      safetySettings: [
+        {
+          category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+          threshold: HarmBlockThreshold.BLOCK_NONE,
+        },
+      ],
+    });
+
+    const rawResponse = result.response.text();
+    console.log("🔍 Сырой ответ поиска отсутствующих требований:", rawResponse.substring(0, 300));
+    
+    if (!rawResponse || rawResponse.trim() === '') {
+      console.log("⚠️ Пустой ответ, возвращаем пустой список отсутствующих требований");
+      return { missingRequirements: [] };
+    }
+    
+    return extractJsonFromResponse(rawResponse);
+  } catch (error) {
+    console.error("❌ Ошибка при поиске отсутствующих требований:", error);
+    if (error instanceof Error && error.message.includes('429')) {
+      keyPool.markKeyAsExhausted(keyToUse);
+      console.log("🔑 Ключ исчерпан, пробуем другой...");
+      return await findMissingRequirements(contractText, checklistText, foundConditions, perspective, onProgress);
+    }
+    return { missingRequirements: [] };
+  }
+}
+
+
 
 // Разбивка договора на абзацы
 function splitIntoSpans(text: string): Array<{ id: string; text: string }> {
@@ -59,428 +542,60 @@ function splitIntoSpans(text: string): Array<{ id: string; text: string }> {
     }));
 }
 
+// Основная функция анализа
 export async function analyzeContractWithGemini(
   contractText: string,
   checklistText: string,
   riskText: string,
-  perspective: 'buyer' | 'supplier' = 'buyer'
-): Promise<{ contractParagraphs: ContractParagraph[], missingRequirements: ContractParagraph[], ambiguousConditions: ContractParagraph[], structuralAnalysis: any }> {
-  const api_key = import.meta.env.VITE_API_KEY;
-  if (!api_key) {
-    throw new Error("VITE_API_KEY не установлен");
-  }
-
-  const genAI = new GoogleGenerativeAI(api_key);
-  const model = genAI.getGenerativeModel({ 
-    model: MODEL_NAME,
-    systemInstruction: `Ты - эксперт по анализу договоров поставки в России. Анализируй договоры с точки зрения ${perspective === 'buyer' ? 'Покупателя' : 'Поставщика'}.`
-  });
-
-  const paragraphs = splitIntoSpans(contractText);
-
-  const perspectiveContext = perspective === 'buyer'
-    ? {
-        role: 'Покупателя',
-        requirements: 'требования Покупателя',
-        risks: 'риски для Покупателя',
-        attention: 'требуют внимания Покупателя',
-        missing: 'отсутствующих требований Покупателя',
-        beneficiary: 'покупателя'
-      }
-    : {
-        role: 'Поставщика', 
-        requirements: 'требования Поставщика',
-        risks: 'риски для Поставщика',
-        attention: 'требуют внимания Поставщика',
-        missing: 'отсутствующих требований Поставщика',
-        beneficiary: 'поставщика'
-      };
-
-  const userPrompt = `Ты - AI-ассистент юриста, специализирующийся на анализе договоров поставки в соответствии с законодательством РФ.
-
-❗ ПЕРВООЧЕРЕДНАЯ ЗАДАЧА: НАЙТИ НЕОДНОЗНАЧНЫЕ УСЛОВИЯ! ❗
-В КАЖДОМ договоре есть неоднозначные формулировки!
-ТЫ ОБЯЗАН найти минимум 5-10 неоднозначных условий и пометить их как category: "ambiguous"!
-
-НЕОДНОЗНАЧНЫЕ УСЛОВИЯ - ОБЯЗАТЕЛЬНО ИЩИ:
-• "своевременно", "незамедлительно" - БЕЗ конкретных сроков
-• "по усмотрению", "по согласованию" - односторонние решения
-• "в случае необходимости" - неопределенные условия  
-• "разумные сроки", "должным образом" - без критериев
-• "иные расходы", "дополнительные затраты" - открытые списки
-
-ЭТАП 1: СТРУКТУРНЫЙ АНАЛИЗ ДОГОВОРА
-
-Сначала изучи весь договор ЦЕЛИКОМ для понимания ключевых рисков с позиции ${perspectiveContext.role}.
-
-ЭТАП 2: ДЕТАЛЬНЫЙ АНАЛИЗ ПО АБЗАЦАМ
-
-Проанализируй каждый абзац с позиции ${perspectiveContext.role.toUpperCase()}.
-
-ВАЖНО: Для пунктов, НЕ ОТНОСЯЩИХСЯ к чек-листу, рискам или неоднозначным условиям, указывай только:
-- id, category: null, comment: null, recommendation: null, improvedClause: null, legalRisk: null
-
-ПОЛНЫЙ анализ проводи ТОЛЬКО для пунктов:
-1. Соответствующих требованиям из чек-листа (category: "checklist" или "partial")
-2. Содержащих риски из списка рисков (category: "risk") 
-3. Содержащих неоднозначные условия (category: "ambiguous") - ОБЯЗАТЕЛЬНО!
-4. Отсутствующих в договоре, но требуемых (category: "missing")
-
-Чек-лист ${perspectiveContext.requirements}:
-${checklistText}
-
----
-Список рисков для ${perspectiveContext.role}:
-${riskText}
-
----
-ПОЛНЫЙ ТЕКСТ ДОГОВОРА:
-${contractText}
-
----
-ДОГОВОР РАЗБИТЫЙ НА АБЗАЦЫ:
-${JSON.stringify(paragraphs)}
-
----
-КАТЕГОРИИ:
-1. "checklist" - полностью соответствует требованиям чек-листа
-2. "partial" - частично соответствует требованиям чек-листа, но не достигает их
-3. "risk" - содержит условие из списка рисков
-4. "ambiguous" - содержит неоднозначные условия (ОБЯЗАТЕЛЬНО НАЙТИ МИНИМУМ 5-10 ПРИМЕРОВ!)
-5. null - для остальных абзацев
-
-❗ КРАЙНЕ ВАЖНО ДЛЯ КАТЕГОРИИ "ambiguous" ❗
-ОБЯЗАТЕЛЬНО найди и пометь следующие фразы из договора:
-• "своевременной приемки" - категория: "ambiguous" (нет точного срока)
-• "незамедлительно вызвать" - категория: "ambiguous" (неопределенное время)
-• "по усмотрению Поставщика" - категория: "ambiguous" (односторонние решения)
-• "в установленном порядке" - категория: "ambiguous" (порядок не определен)
-• "иные расходы" - категория: "ambiguous" (открытый список)
-• "в разумные сроки" - категория: "ambiguous" (субъективная оценка)
-
-ШАБЛОН для category: "ambiguous":
-{
-  "id": X,
-  "category": "ambiguous", 
-  "comment": "Неоднозначная формулировка: [точное описание проблемы]",
-  "recommendation": "Предложить конкретные сроки/критерии вместо расплывчатых формулировок"
-}
-
-ТРЕБУЕМЫЙ КОМПАКТНЫЙ JSON (БЕЗ ЛИШНИХ СЛОВ):
-{
-  "structuralAnalysis": {
-    "overallAssessment": "Краткая оценка договора",
-    "keyRisks": ["Риск 1", "Риск 2", "Риск 3"],
-    "structureComments": "Краткие комментарии по структуре",
-    "legalCompliance": "Краткая оценка соответствия закону",
-    "recommendations": ["Рекомендация 1", "Рекомендация 2"]
-  },
-  "analysis": [
-    {
-      "id": "p1",
-      "category": "checklist",
-      "comment": "Краткая оценка",
-      "recommendation": "Краткая рекомендация",
-      "improvedClause": "Краткая улучшенная формулировка",
-      "legalRisk": "Краткий правовой риск"
-    },
-    {
-      "id": "p2",
-      "category": "ambiguous",
-      "comment": "Неоднозначная формулировка: конкретная проблема",
-      "recommendation": "Конкретное предложение",
-      "improvedClause": "Точная формулировка",
-      "legalRisk": "Правовой риск"
-    },
-    {
-      "id": "p3",
-      "category": null,
-      "comment": null,
-      "recommendation": null,
-      "improvedClause": null,
-      "legalRisk": null
-    }
-  ],
-  "missingRequirements": [
-    {
-      "requirement": "Название требования",
-      "comment": "Краткое объяснение важности (1-2 предложения)"
-    }
-  ]
-}
-
-ВАЖНО: 
-- Пиши КРАТКО, экономь токены
-- АКТИВНО ищи неоднозначные условия в каждом абзаце договора!
-- Для null категорий все поля должны быть null
-- Детальный анализ ТОЛЬКО для релевантных категорий
-- В missingRequirements: краткое название + краткое объяснение важности (1-2 предложения)`
-
+  perspective: 'buyer' | 'supplier' = 'buyer',
+  onProgress: (message: string) => void = () => {}
+): Promise<{ contractParagraphs: ContractParagraph[], missingRequirements: ContractParagraph[], ambiguousConditions: ContractParagraph[], structuralAnalysis: any, contradictions: any[] }> {
+  console.log(`🚀 Начинаем многоэтапный анализ договора (${keyPool.getKeyCount()} API ключей)`);
+  
   try {
-    console.log("🚀 Sending request to Gemini API...");
-    console.log("Model:", MODEL_NAME);
-    console.log("Prompt length:", userPrompt.length);
+    // Этап 1: Разбивка на абзацы и создание чанков
+    onProgress("Подготовка данных...");
+    const paragraphs = splitIntoSpans(contractText);
+    const chunks = createChunks(paragraphs, 15); // Большие чанки для максимального использования API лимитов
     
-    // Оценка токенов на стороне клиента
-    const estimatedTokens = Math.ceil(userPrompt.length / 3.5);
-    console.log("=== ОЦЕНКА ТОКЕНОВ (КЛИЕНТ) ===");
-    console.log("📝 Длина промпта (символы):", userPrompt.length.toLocaleString());
-    console.log("🔢 Оценка токенов (клиент):", estimatedTokens.toLocaleString());
-    console.log("📊 Настроенный лимит выхода:", "8,192 токена (максимальный)");
+    console.log(`📄 Договор разбит на ${paragraphs.length} абзацев и ${chunks.length} чанков`);
+    console.log(`🔑 Доступно API ключей: ${keyPool.getAvailableKeyCount()}/${keyPool.getKeyCount()}`);
     
-    if (estimatedTokens > 900000) {
-      console.warn("⚠️ ПРЕДУПРЕЖДЕНИЕ: Очень большой промпт, возможны проблемы");
-    }
+    // Этап 2: Последовательный анализ больших чанков
+    const chunkResults = await processChunksSequentially(chunks, checklistText, riskText, perspective, onProgress);
     
-    const generationConfig = {
-      responseMimeType: "application/json",
-      temperature: 0.1,
-      maxOutputTokens: 8192,  // Максимальный лимит для Gemini 2.0 Flash
-      topP: 0.95,
-      topK: 64,
-    };
+    // Этап 3: Структурный анализ
+    const structuralResult = await performStructuralAnalysis(contractText, chunkResults, perspective, onProgress);
     
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      generationConfig,
+    // Этап 4: Сбор найденных условий для поиска отсутствующих
+    const foundConditions: string[] = [];
+    const allAnalysis: any[] = [];
+    
+    chunkResults.forEach(chunkResult => {
+      if (chunkResult.analysis) {
+        allAnalysis.push(...chunkResult.analysis);
+        chunkResult.analysis.forEach((item: any) => {
+          // Только полностью выполненные требования (checklist) считаем найденными
+          // Частично выполненные (partial) НЕ считаем полностью найденными
+          if (item.category === 'checklist') {
+            foundConditions.push(`Выполнено: абзац ${item.id}`);
+          }
+        });
+      }
     });
-
-    console.log("📥 Received response from Gemini API");
-    console.log("Response object:", result);
-    console.log("Response candidates:", result.response?.candidates?.length || 0);
     
-    // Детальная информация о токенах
-    if (result.response?.usageMetadata) {
-      const usage = result.response.usageMetadata;
-      console.log("=== ИСПОЛЬЗОВАНИЕ ТОКЕНОВ ===");
-      console.log("📊 Входные токены:", usage.promptTokenCount || "не указано");
-      console.log("📊 Выходные токены:", usage.candidatesTokenCount || "не указано");
-      console.log("📊 Всего токенов:", usage.totalTokenCount || "не указано");
-      
-      // Проверяем только лимит выходных токенов
-      const outputLimit = 8192;    // Максимальный лимит для Gemini 2.0 Flash
-      
-      if (usage.candidatesTokenCount) {
-        const outputUsage = (usage.candidatesTokenCount / outputLimit * 100).toFixed(1);
-        console.log(`📈 Использование выходных токенов: ${outputUsage}% из ${outputLimit.toLocaleString()}`);
-        
-        if (usage.candidatesTokenCount >= outputLimit * 0.95) {
-          console.warn("⚠️ КРИТИЧНО: Использовано >95% лимита выходных токенов!");
-        } else if (usage.candidatesTokenCount >= outputLimit * 0.8) {
-          console.warn("⚠️ ВНИМАНИЕ: Использовано >80% лимита выходных токенов!");
-        }
-      }
-    } else {
-      console.warn("⚠️ Метаданные использования токенов недоступны");
-    }
+    // Этап 5: Поиск отсутствующих требований
+    const missingResult = await findMissingRequirements(contractText, checklistText, foundConditions, perspective, onProgress);
     
-    // Объявляем rawText заранее
-    let rawText = '';
+    // Этап 6: Слияние данных с исходными текстами
+    onProgress("Финализация результатов...");
     
-    if (result.response?.candidates && result.response.candidates.length > 0) {
-      const candidate = result.response.candidates[0];
-      console.log("=== ИНФОРМАЦИЯ О КАНДИДАТЕ ===");
-      console.log("First candidate:", candidate);
-      console.log("Candidate finish reason:", candidate.finishReason);
-      console.log("Candidate safety ratings:", candidate.safetyRatings);
-      
-      // Детальный анализ причины завершения
-      switch (candidate.finishReason) {
-        case 'STOP':
-          console.log("✅ Генерация завершена нормально");
-          break;
-        case 'MAX_TOKENS':
-          console.error("❌ ПРЕВЫШЕН ЛИМИТ ВЫХОДНЫХ ТОКЕНОВ!");
-          console.error("💡 Решение: Увеличить maxOutputTokens или сократить промпт");
-          break;
-        case 'SAFETY':
-          console.error("❌ Контент заблокирован по безопасности");
-          break;
-        case 'RECITATION':
-          console.error("❌ Контент заблокирован из-за повторения");
-          break;
-        case 'OTHER':
-          console.error("❌ Неизвестная причина завершения");
-          break;
-        default:
-          console.warn("⚠️ Неопознанная причина завершения:", candidate.finishReason);
-      }
-      
-      if (candidate.finishReason === 'MAX_TOKENS') {
-        console.warn("⚠️ Response was truncated due to MAX_TOKENS limit");
-        
-        // Fallback: попробуем с меньшим лимитом
-        if (generationConfig?.maxOutputTokens && generationConfig.maxOutputTokens > 5000) {
-          console.log("🔄 Attempting fallback with reduced token limit...");
-          const fallbackLimit = Math.floor(generationConfig.maxOutputTokens * 0.8);
-          
-          try {
-            const fallbackResult = await model.generateContent({
-              contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.1,
-                maxOutputTokens: fallbackLimit,
-                topP: 0.95,
-                topK: 64,
-              },
-            });
-            
-            if (fallbackResult.response?.candidates?.[0]?.finishReason === 'STOP') {
-              console.log("✅ Fallback successful with limit:", fallbackLimit);
-              // Используем fallback результат
-              const fallbackResponse = fallbackResult.response;
-              let fallbackText = fallbackResponse.text();
-              // Продолжаем с fallback результатом...
-              rawText = fallbackText;
-            } else {
-              throw new Error("Ответ от Gemini был обрезан из-за превышения лимита токенов. Попробуйте сократить текст договора или разбить анализ на части.");
-            }
-          } catch (fallbackError) {
-            console.error("❌ Fallback also failed:", fallbackError);
-            throw new Error("Ответ от Gemini был обрезан из-за превышения лимита токенов. Попробуйте сократить текст договора или разбить анализ на части.");
-          }
-        } else {
-          throw new Error("Ответ от Gemini был обрезан из-за превышения лимита токенов. Попробуйте сократить текст договора или разбить анализ на части.");
-        }
-      }
-    }
-
-    const response = result.response;
-    if (!rawText) {
-      rawText = response.text();
-    }
-    
-    console.log("=== GEMINI RESPONSE DEBUG ===");
-    console.log("Raw response length:", rawText.length);
-    
-    if (rawText.length === 0) {
-      console.error("❌ EMPTY RESPONSE FROM GEMINI!");
-      console.error("Full result object:", JSON.stringify(result, null, 2));
-      throw new Error("Gemini вернул пустой ответ. Возможно, контент был заблокирован или модель недоступна.");
-    }
-    
-    // Более надежная очистка JSON для разных версий Gemini
-    let cleanedResponse = rawText.trim();
-    
-    // Удаляем markdown блоки если есть
-    if (cleanedResponse.includes('```json')) {
-      const jsonMatch = cleanedResponse.match(/```json\s*([\s\S]*?)\s*```/);
-      if (jsonMatch) {
-        cleanedResponse = jsonMatch[1].trim();
-      }
-    } else if (cleanedResponse.includes('```')) {
-      const codeMatch = cleanedResponse.match(/```\s*([\s\S]*?)\s*```/);
-      if (codeMatch) {
-        cleanedResponse = codeMatch[1].trim();
-      }
-    }
-    
-    console.log("After markdown removal:", cleanedResponse.substring(0, 200));
-    
-    // Очищаем проблемные символы (табуляции, неразрывные пробелы, etc)
-    cleanedResponse = cleanedResponse
-      .replace(/\t/g, ' ')           // Заменяем табуляции на пробелы
-      .replace(/\u00A0/g, ' ')       // Заменяем неразрывные пробелы
-      .replace(/\u2028/g, ' ')       // Заменяем line separator
-      .replace(/\u2029/g, ' ')       // Заменяем paragraph separator
-      .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' '); // Удаляем control characters
-    
-    console.log("After character cleaning:", cleanedResponse.substring(0, 200));
-    
-    // Для Gemini 2.5 - если ответ уже начинается с { и заканчивается }, НЕ ТРОГАЕМ его
-    if (cleanedResponse.startsWith('{') && cleanedResponse.endsWith('}')) {
-      console.log("✅ Response is already valid JSON format, skipping aggressive cleaning");
-      // НЕ ДЕЛАЕМ НИЧЕГО - оставляем как есть
-    } else if (cleanedResponse.startsWith('[') && cleanedResponse.endsWith(']')) {
-      console.log("✅ Response is already valid JSON array format, skipping aggressive cleaning");
-      // НЕ ДЕЛАЕМ НИЧЕГО - оставляем как есть
-    } else {
-      // Только для случаев когда JSON НЕ в правильном формате
-      console.log("⚠️ Response needs cleaning, applying regex fixes");
-      const originalLength = cleanedResponse.length;
-      cleanedResponse = cleanedResponse
-        .replace(/^[^{]*({[\s\S]*})[^}]*$/, '$1')
-        .replace(/^[^[]*(\[[\s\S]*\])[^\]]*$/, '$1');
-      
-      console.log("After prefix/suffix removal:", cleanedResponse.length !== originalLength ? "CHANGED" : "NO_CHANGE");
-    }
-    
-    console.log("Cleaned response length:", cleanedResponse.length);
-    console.log("Cleaned response (first 500 chars):", cleanedResponse.substring(0, 500));
-    
-    // Проверяем, что у нас есть валидный JSON
-    if (!cleanedResponse.startsWith('{') && !cleanedResponse.startsWith('[')) {
-      console.error("ERROR: Response doesn't start with { or [");
-      console.error("Full cleaned response:", cleanedResponse);
-      throw new Error(`Ответ не содержит валидный JSON. Получен: ${cleanedResponse.substring(0, 200)}...`);
-    }
-    
-    console.log("Attempting to parse JSON...");
-    
-    let parsedResponse;
-    try {
-      parsedResponse = JSON.parse(cleanedResponse);
-      console.log("✅ JSON parsed successfully on first attempt");
-    } catch (parseError) {
-      console.error("❌ JSON parse error:", parseError);
-      console.error("Failed to parse (first 1000 chars):", cleanedResponse.substring(0, 1000));
-      
-      // Попытка исправить распространенные проблемы JSON
-      console.log("Attempting to fix JSON...");
-      let fixedJson = cleanedResponse
-        .replace(/,\s*}/g, '}')  // Удаляем trailing commas
-        .replace(/,\s*]/g, ']')
-        .replace(/([{,]\s*)(\w+):/g, '$1"$2":')  // Добавляем кавычки к ключам
-        .replace(/:\s*([^",\[\]{}\s]+)(\s*[,}])/g, ': "$1"$2'); // Добавляем кавычки к значениям
-      
-      console.log("Fixed JSON (first 500 chars):", fixedJson.substring(0, 500));
-      
-      try {
-        parsedResponse = JSON.parse(fixedJson);
-        console.log("✅ JSON parsed successfully after fixing");
-      } catch (secondParseError) {
-        console.error("❌ Second JSON parse error:", secondParseError);
-        console.error("Fixed JSON that still failed:", fixedJson.substring(0, 1000));
-        
-        // Последняя попытка - попробуем найти JSON в тексте
-        console.log("Last attempt: searching for JSON in text...");
-        const jsonMatches = rawText.match(/{[\s\S]*}/g);
-        if (jsonMatches && jsonMatches.length > 0) {
-          console.log("Found potential JSON matches:", jsonMatches.length);
-          for (let i = 0; i < jsonMatches.length; i++) {
-            try {
-              parsedResponse = JSON.parse(jsonMatches[i]);
-              console.log(`✅ Successfully parsed JSON match ${i + 1}`);
-              break;
-            } catch (e) {
-              console.log(`❌ JSON match ${i + 1} failed to parse`);
-            }
-          }
-        }
-        
-        if (!parsedResponse) {
-          throw new Error(`Не удалось распарсить ответ от Gemini. Проверьте корректность данных и попробуйте снова.`);
-        }
-      }
-    }
-    
-    // Валидация структуры ответа
-    if (!parsedResponse || typeof parsedResponse !== 'object') {
-      throw new Error('Ответ от Gemini не содержит валидный объект');
-    }
-    
-    console.log("Parsed response data structure:", Object.keys(parsedResponse));
-    console.log("Analysis array length:", parsedResponse.analysis?.length || 0);
-    console.log("Missing requirements length:", parsedResponse.missingRequirements?.length || 0);
-
-    // Обработка результатов анализа абзацев
     const contractParagraphs: ContractParagraph[] = paragraphs.map(paragraph => {
-      const analysis = parsedResponse.analysis?.find((item: any) => item.id === paragraph.id);
+      const analysis = allAnalysis.find((item: any) => item.id === paragraph.id);
       
       return {
         id: paragraph.id,
-        text: paragraph.text,
+        text: paragraph.text, // Исходный текст абзаца
         category: analysis?.category || null,
         comment: analysis?.comment || null,
         recommendation: analysis?.recommendation || null,
@@ -490,66 +605,60 @@ ${JSON.stringify(paragraphs)}
       };
     });
 
-    // Обработка отсутствующих требований
-    const missingRequirements: ContractParagraph[] = (parsedResponse.missingRequirements || []).map((req: any, index: number) => ({
+    const missingRequirements: ContractParagraph[] = (missingResult.missingRequirements || []).map((req: any, index: number) => ({
       id: `missing_${index + 1}`,
       text: req.requirement || "Неопределенное требование",
       comment: req.comment || null,
-      recommendation: null,
+      recommendation: req.recommendation || null,
       category: 'missing' as const,
     }));
 
-    console.log("Final results:", {
-      contractParagraphs: contractParagraphs.length,
-      missingRequirements: missingRequirements.length,
-      hasStructuralAnalysis: !!parsedResponse.structuralAnalysis
-    });
+    // Извлечение неоднозначных условий для отдельного массива
+    const ambiguousConditions: ContractParagraph[] = contractParagraphs.filter(p => p.category === 'ambiguous');
 
-    // Дополнительная статистика для отладки
-    const categoryStats = {
+    const finalStructuralAnalysis = structuralResult.structuralAnalysis || {
+      overallAssessment: "Анализ выполнен",
+      keyRisks: [],
+      structureComments: "",
+      legalCompliance: "",
+      recommendations: []
+    };
+
+    // Статистика для отладки
+    const stats = {
+      totalParagraphs: contractParagraphs.length,
       checklist: contractParagraphs.filter(p => p.category === 'checklist').length,
       partial: contractParagraphs.filter(p => p.category === 'partial').length,
       risk: contractParagraphs.filter(p => p.category === 'risk').length,
-      ambiguous: contractParagraphs.filter(p => p.category === 'ambiguous').length,
-      other: contractParagraphs.filter(p => p.category === 'other').length,
-      null: contractParagraphs.filter(p => p.category === null).length,
+      ambiguous: ambiguousConditions.length,
+      missing: missingRequirements.length,
     };
-    
-    console.log("=== СТАТИСТИКА КАТЕГОРИЙ ===");
-    console.log("📊 Категории абзацев:", categoryStats);
-    console.log("🟡 Неоднозначные условия найдены:", categoryStats.ambiguous > 0 ? "ДА" : "НЕТ");
-    
-    if (categoryStats.ambiguous > 0) {
-      console.log("🟡 Список неоднозначных условий:");
-      contractParagraphs
-        .filter(p => p.category === 'ambiguous')
-        .forEach((p, index) => {
-          console.log(`   ${index + 1}. ${p.id}: ${p.text.substring(0, 100)}...`);
-          console.log(`      Комментарий: ${p.comment}`);
-        });
-    } else {
-      console.warn("⚠️ НЕОДНОЗНАЧНЫЕ УСЛОВИЯ НЕ НАЙДЕНЫ - проверьте примеры договора");
-    }
+
+    console.log("📊 Финальная статистика:", stats);
+    onProgress("Анализ завершен!");
 
     return {
       contractParagraphs,
       missingRequirements,
-      ambiguousConditions: [], // Теперь неоднозначные условия обрабатываются в contractParagraphs
-      structuralAnalysis: parsedResponse.structuralAnalysis || {
-        overallAssessment: "Анализ выполнен",
-        keyRisks: [],
-        structureComments: "",
-        legalCompliance: "",
-        recommendations: []
-      }
+      ambiguousConditions,
+      structuralAnalysis: finalStructuralAnalysis,
+      contradictions: []
     };
   } catch (error) {
-    console.error("Gemini API error:", error);
+    console.error("❌ Ошибка при анализе договора:", error);
     
     const errorMessage = error instanceof Error ? error.message : String(error);
     
     if (errorMessage?.includes('Candidate was blocked')) {
       throw new Error('Запрос был заблокирован системой безопасности. Попробуйте изменить формулировку.');
+    }
+    
+    if (errorMessage?.includes('Все API ключи исчерпали свои квоты')) {
+      throw new Error('Все API ключи исчерпали свои квоты. Попробуйте позже или добавьте новые ключи.');
+    }
+    
+    if (errorMessage?.includes('Resource has been exhausted')) {
+      throw new Error('Превышен лимит запросов к Gemini API. Попробуйте позже или добавьте новые API ключи.');
     }
     
     if (errorMessage?.includes('не удалось распарсить') || errorMessage?.includes('Failed to parse')) {
