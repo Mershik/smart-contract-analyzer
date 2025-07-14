@@ -11,12 +11,12 @@ interface SidebarFiltersProps {
   showMissing: boolean;
   showOther: boolean;
   showContradictions: boolean;
-  onToggleCompliance: (checked: boolean) => void;
-  onTogglePartial?: (checked: boolean) => void;
-  onToggleRisks: (checked: boolean) => void;
-  onToggleMissing: (checked: boolean) => void;
-  onToggleOther: (checked: boolean) => void;
-  onToggleContradictions: (checked: boolean) => void;
+  onToggleCompliance: (_checked: boolean) => void;
+  onTogglePartial?: (_checked: boolean) => void;
+  onToggleRisks: (_checked: boolean) => void;
+  onToggleMissing: (_checked: boolean) => void;
+  onToggleOther: (_checked: boolean) => void;
+  onToggleContradictions: (_checked: boolean) => void;
   hasResults: boolean;
   complianceCount: number;
   partialCount?: number;
@@ -25,7 +25,7 @@ interface SidebarFiltersProps {
   otherCount: number;
   contradictionsCount: number;
   perspective: AnalysisPerspective;
-  onPerspectiveChange: (perspective: AnalysisPerspective) => void;
+  onPerspectiveChange: (_perspective: AnalysisPerspective) => void;
 }
 
 export function SidebarFilters({
@@ -41,7 +41,7 @@ export function SidebarFilters({
   onToggleMissing,
   onToggleOther,
   onToggleContradictions,
-  hasResults,
+  _hasResults,
   complianceCount,
   partialCount,
   riskCount,

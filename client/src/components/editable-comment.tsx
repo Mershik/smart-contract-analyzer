@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Edit2, Check, X } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 interface EditableCommentProps {
   comment: string;
-  onSave: (newComment: string) => void;
+  onSave: (_newComment: string) => void;
   className?: string;
 }
 

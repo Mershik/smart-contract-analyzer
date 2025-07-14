@@ -1,10 +1,11 @@
+import React from "react";
 import { FileText, Upload, Trash2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
 interface ContractInputProps {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (_value: string) => void;
 }
 
 export function ContractInput({ value, onChange }: ContractInputProps) {

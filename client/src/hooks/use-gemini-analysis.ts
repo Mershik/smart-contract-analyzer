@@ -12,7 +12,7 @@ export function useGeminiAnalysis() {
     checklistText: string,
     riskText: string,
     perspective: 'buyer' | 'supplier' = 'buyer',
-    onProgress?: (message: string) => void
+    onProgress?: (_message: string) => void
   ): Promise<{ 
     contractParagraphs: ContractParagraph[], 
     missingRequirements: ContractParagraph[], 

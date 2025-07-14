@@ -1,14 +1,14 @@
-import { users, type User, type InsertUser, type ContractAnalysis, type InsertContractAnalysis } from "@shared/schema";
+import { type User, type InsertUser, type ContractAnalysis, type InsertContractAnalysis } from "@shared/schema";
 
 // modify the interface with any CRUD methods
 // you might need
 
 export interface IStorage {
-  getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  createContractAnalysis(analysis: InsertContractAnalysis): Promise<ContractAnalysis>;
-  getAnalysisByHash(hash: string): Promise<ContractAnalysis | undefined>;
+  getUser(_id: number): Promise<User | undefined>;
+  getUserByUsername(_username: string): Promise<User | undefined>;
+  createUser(_user: InsertUser): Promise<User>;
+  createContractAnalysis(_analysis: InsertContractAnalysis): Promise<ContractAnalysis>;
+  getAnalysisByHash(_hash: string): Promise<ContractAnalysis | undefined>;
 }
 
 export class MemStorage implements IStorage {

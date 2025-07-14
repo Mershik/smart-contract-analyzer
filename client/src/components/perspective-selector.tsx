@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 export type AnalysisPerspective = 'buyer' | 'supplier';
 
 interface PerspectiveSelectorProps {
-  perspective: AnalysisPerspective;
-  onPerspectiveChange: (perspective: AnalysisPerspective) => void;
+  perspective: 'buyer' | 'supplier';
+  onPerspectiveChange: (_perspective: 'buyer' | 'supplier') => void;
 }
 
 export function PerspectiveSelector({ perspective, onPerspectiveChange }: PerspectiveSelectorProps) {

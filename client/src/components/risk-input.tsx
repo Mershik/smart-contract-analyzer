@@ -5,7 +5,7 @@ import { useState } from "react";
 
 interface RiskInputProps {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (_value: string) => void;
   perspective?: 'buyer' | 'supplier';
 }
 

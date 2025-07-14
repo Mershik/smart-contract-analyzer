@@ -8,7 +8,7 @@ interface ExpandableParagraphProps {
   showPartial?: boolean;
   showRisks?: boolean;
   showOther?: boolean;
-  onToggle?: (id: string) => void;
+  onToggle?: (_id: string) => void;
 }
 
 export function ExpandableParagraph({ 

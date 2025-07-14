@@ -14,22 +14,22 @@ interface AnalysisResultsProps {
   showMissing: boolean;
   showPartial?: boolean;
   exportToDocx: () => void;
-  onUpdateComment?: (id: string, newComment: string) => void;
-  onSubmitFeedback?: (feedback: any) => void;
+  onUpdateComment?: (_id: string, _newComment: string) => void;
+  onSubmitFeedback?: (_feedback: any) => void;
 }
 
 export function AnalysisResults({ 
   contractParagraphs, 
   missingRequirements,
-  ambiguousConditions,
+  _ambiguousConditions,
   showCompliance, 
   showRisks, 
   showOther, 
   showMissing, 
   showPartial, 
   exportToDocx,
-  onUpdateComment,
-  onSubmitFeedback
+  _onUpdateComment,
+  _onSubmitFeedback
 }: AnalysisResultsProps) {
   
   const handleExport = () => {
@@ -114,7 +114,7 @@ export function AnalysisResults({
       <div className="mt-8">
         <QualityFeedback 
           analysisId={`analysis_${Date.now()}`}
-          onSubmitFeedback={onSubmitFeedback}
+          onSubmitFeedback={_onSubmitFeedback}
         />
       </div>
     </div>

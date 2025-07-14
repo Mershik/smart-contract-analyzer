@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, AlertTriangle, CheckCircle, Star } from 'lucide-react';
+import { BarChart3, AlertTriangle, CheckCircle, Star } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { FeedbackData } from './quality-feedback';

@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { ThumbsUp, ThumbsDown, MessageSquare, Star, AlertCircle } from 'lucide-react';
+import { ThumbsUp, MessageSquare, Star } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface QualityFeedbackProps {
   analysisId?: string;
-  onSubmitFeedback?: (feedback: FeedbackData) => void;
+  onSubmitFeedback?: (_feedback: FeedbackData) => void;
 }
 
 export interface FeedbackData {

@@ -26,7 +26,7 @@ export interface ToastProps
   description?: React.ReactNode
   action?: ToastActionElement
   open?: boolean
-  onOpenChange?: (open: boolean) => void
+  onOpenChange?: (_open: boolean) => void
 }
 
 export interface ToastActionElement {
@@ -52,7 +52,7 @@ const ToastAction = React.forwardRef<
   React.ComponentPropsWithoutRef<"button"> & {
     altText: string
   }
->(({ className, altText, ...props }, ref) => {
+>(({ className, _altText, ...props }, ref) => {
   return (
     <button
       ref={ref}

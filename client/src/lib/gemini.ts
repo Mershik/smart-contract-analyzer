@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { analysisResponseSchema, type ContractParagraph, type AnalysisResponse } from "@shared/schema";
+import { type ContractParagraph } from "@shared/schema";
 
 const MODEL_NAME = 'gemini-2.5-flash';
 
@@ -113,7 +113,8 @@ function extractJsonFromResponse(rawResponse: string): any {
     .replace(/\u00A0/g, ' ')
     .replace(/\u2028/g, ' ')
     .replace(/\u2029/g, ' ')
-    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ');
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1F\x7F-\x9F]/g, ' ');
   
   // Попытка парсинга
   try {
