@@ -339,8 +339,8 @@ JSON:
   throw lastError || new Error(`Не удалось обработать чанк ${chunk.id} после ${maxRetries} попыток`);
 }
 
-// Пакетная обработка чанков по 4 за раз
-async function processChunksSequentially(
+// Параллельная обработка чанков с контролируемым параллелизмом
+async function processChunksInParallel(
   chunks: Array<{ id: string; paragraphs: Array<{ id: string; text: string }> }>,
   checklistText: string,
   riskText: string,
@@ -349,30 +349,76 @@ async function processChunksSequentially(
 ): Promise<any[]> {
   const results: any[] = [];
   
-  console.log(`📋 Начинаем последовательную обработку ${chunks.length} больших чанков`);
+  // Настройки параллелизма
+  const batchSize = Math.min(3, keyPool.getAvailableKeyCount()); // Максимум 3 одновременных запроса
+  const batchDelay = 4000; // 4 секунды между батчами
   
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const chunkNumber = i + 1;
+  console.log(`📋 Начинаем параллельную обработку ${chunks.length} чанков (батчи по ${batchSize}, пауза ${batchDelay}ms)`);
+  
+  // Разбиваем чанки на батчи
+  for (let i = 0; i < chunks.length; i += batchSize) {
+    const batch = chunks.slice(i, i + batchSize);
+    const batchNumber = Math.floor(i / batchSize) + 1;
+    const totalBatches = Math.ceil(chunks.length / batchSize);
     
-    onProgress(`Анализ чанка ${chunkNumber} из ${chunks.length} (${chunk.paragraphs.length} абзацев)`);
+    onProgress(`Обработка батча ${batchNumber}/${totalBatches} (${batch.length} чанков параллельно)`);
+    
+    console.log(`🚀 Запускаем батч ${batchNumber}: чанки ${i + 1}-${Math.min(i + batchSize, chunks.length)}`);
     
     try {
-      console.log(`🔍 Обрабатываем чанк ${chunkNumber}: ${chunk.paragraphs.length} абзацев`);
-      const chunkResult: any = await analyzeChunk(chunk, checklistText, riskText, perspective);
-      results.push(chunkResult);
+      // Запускаем обработку всех чанков в батче параллельно
+      const batchPromises = batch.map(async (chunk, index) => {
+        const chunkNumber = i + index + 1;
+        console.log(`🔍 Обрабатываем чанк ${chunkNumber} параллельно: ${chunk.paragraphs.length} абзацев`);
+        
+        try {
+          const result = await analyzeChunk(chunk, checklistText, riskText, perspective);
+          console.log(`✅ Чанк ${chunkNumber} обработан успешно`);
+          return { index: chunkNumber - 1, result };
+        } catch (error) {
+          console.error(`❌ Ошибка в чанке ${chunkNumber}:`, error);
+          throw new Error(`Чанк ${chunkNumber}: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
+        }
+      });
       
-      // Пауза между чанками для стабильности
-      if (i < chunks.length - 1) {
+      // Ждем завершения всех задач в батче
+      const batchResults = await Promise.allSettled(batchPromises);
+      
+      // Обрабатываем результаты
+      batchResults.forEach((result, batchIndex) => {
+        if (result.status === 'fulfilled') {
+          results[result.value.index] = result.value.result;
+        } else {
+          const chunkNumber = i + batchIndex + 1;
+          console.error(`❌ Батч ${batchNumber}, чанк ${chunkNumber} завершился с ошибкой:`, result.reason);
+          throw new Error(`Не удалось обработать чанк ${chunkNumber}: ${result.reason}`);
+        }
+      });
+      
+      console.log(`✅ Батч ${batchNumber} завершен успешно (${batch.length} чанков)`);
+      
+      // Пауза между батчами (кроме последнего)
+      if (i + batchSize < chunks.length) {
         const availableKeys = keyPool.getAvailableKeyCount();
-        const delay = availableKeys > 8 ? 1000 : availableKeys > 4 ? 2000 : 3000;
-        console.log(`⏱️ Пауза ${delay}ms между чанками (доступно ключей: ${availableKeys})`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        const actualDelay = availableKeys > 6 ? batchDelay * 0.7 : batchDelay; // Сокращаем задержку если много ключей
+        
+        console.log(`⏱️ Пауза ${actualDelay}ms между батчами (доступно ключей: ${availableKeys})`);
+        onProgress(`Пауза между батчами... (${actualDelay}ms)`);
+        await new Promise(resolve => setTimeout(resolve, actualDelay));
       }
+      
     } catch (error) {
-      console.error(`❌ Ошибка в чанке ${chunkNumber}:`, error);
+      console.error(`❌ Критическая ошибка в батче ${batchNumber}:`, error);
       throw error;
     }
+  }
+  
+  // Проверяем что все результаты получены
+  const processedCount = results.filter(r => r !== undefined).length;
+  console.log(`📊 Параллельная обработка завершена: ${processedCount}/${chunks.length} чанков`);
+  
+  if (processedCount !== chunks.length) {
+    throw new Error(`Не все чанки были обработаны: ${processedCount}/${chunks.length}`);
   }
   
   return results;
@@ -562,8 +608,8 @@ export async function analyzeContractWithGemini(
     console.log(`📄 Договор разбит на ${paragraphs.length} абзацев и ${chunks.length} чанков`);
     console.log(`🔑 Доступно API ключей: ${keyPool.getAvailableKeyCount()}/${keyPool.getKeyCount()}`);
     
-    // Этап 2: Последовательный анализ больших чанков
-    const chunkResults = await processChunksSequentially(chunks, checklistText, riskText, perspective, onProgress);
+    // Этап 2: Параллельный анализ чанков с контролируемым параллелизмом
+    const chunkResults = await processChunksInParallel(chunks, checklistText, riskText, perspective, onProgress);
     
     // Этап 3: Структурный анализ
     const structuralResult = await performStructuralAnalysis(contractText, chunkResults, perspective, onProgress);
