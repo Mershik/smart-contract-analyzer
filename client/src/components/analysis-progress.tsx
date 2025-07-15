@@ -19,17 +19,17 @@ const ANALYSIS_STAGES = [
     progressRange: [0, 10]
   },
   {
-    id: 'chunks',
+    id: 'content',
     label: 'Анализ содержимого',
-    description: 'Анализ абзацев договора с помощью ИИ',
+    description: 'Проверка пунктов договора на соответствие требованиям',
     icon: Brain,
-    keywords: ['Анализ чанка'],
+    keywords: ['Анализ содержимого договора', 'Обработка следующей части договора'],
     progressRange: [10, 70]
   },
   {
     id: 'structure',
     label: 'Структурный анализ',
-    description: 'Оценка общей структуры договора',
+    description: 'Оценка общей структуры и полноты договора',
     icon: Search,
     keywords: ['структурный анализ'],
     progressRange: [70, 80]
@@ -37,7 +37,7 @@ const ANALYSIS_STAGES = [
   {
     id: 'requirements',
     label: 'Проверка требований',
-    description: 'Проверка наличия обязательных условий',
+    description: 'Выявление отсутствующих обязательных условий',
     icon: Search,
     keywords: ['отсутствующих требований'],
     progressRange: [80, 90]
@@ -45,7 +45,7 @@ const ANALYSIS_STAGES = [
   {
     id: 'finalization',
     label: 'Финализация',
-    description: 'Объединение результатов анализа',
+    description: 'Объединение результатов и подготовка отчета',
     icon: Zap,
     keywords: ['Финализация'],
     progressRange: [90, 99]
@@ -67,24 +67,31 @@ function getProgressFromMessage(message: string): number {
   // Подготовка данных - 10%
   if (message.includes('Подготовка данных')) return 10;
   
-  // Анализ чанков - 10% до 70%
-  if (message.includes('Анализ чанка')) {
-    const match = message.match(/(\d+)\s+из\s+(\d+)/);
-    if (match) {
-      const current = parseInt(match[1]);
-      const total = parseInt(match[2]);
-      return 10 + (current / total) * 60; // от 10% до 70%
+  // Анализ содержимого договора - от 10% до 70%
+  if (message.includes('Анализ содержимого договора')) {
+    // Ищем процент в сообщении "Анализ содержимого договора... 45% завершено"
+    const percentMatch = message.match(/(\d+)%\s+завершено/);
+    if (percentMatch) {
+      const messagePercent = parseInt(percentMatch[1]);
+      // Масштабируем от 10% до 70% (диапазон 60%)
+      return 10 + (messagePercent / 100) * 60;
     }
+    return 10; // Начальное значение если процент не найден
   }
   
-  // Структурный анализ - 80%
-  if (message.includes('структурный анализ')) return 80;
+  // Обработка следующей части договора - промежуточное состояние
+  if (message.includes('Обработка следующей части договора')) {
+    return 45; // Примерно средний прогресс
+  }
   
-  // Поиск отсутствующих требований - 90%
-  if (message.includes('отсутствующих требований')) return 90;
+  // Структурный анализ - 75%
+  if (message.includes('структурный анализ')) return 75;
   
-  // Финализация - 99%
-  if (message.includes('Финализация')) return 99;
+  // Поиск отсутствующих требований - 85%
+  if (message.includes('отсутствующих требований')) return 85;
+  
+  // Финализация - 95%
+  if (message.includes('Финализация')) return 95;
   
   // Анализ завершен - 100%
   if (message.includes('завершен')) return 100;
@@ -96,12 +103,12 @@ function getProgressFromMessage(message: string): number {
 function getCurrentStage(message: string): number {
   if (!message) return 0;
   
-  for (let i = 0; i < ANALYSIS_STAGES.length; i++) {
-    const stage = ANALYSIS_STAGES[i];
-    if (stage.keywords.some(keyword => message.includes(keyword))) {
-      return i;
-    }
-  }
+  if (message.includes('Подготовка данных')) return 0;
+  if (message.includes('Анализ содержимого договора') || message.includes('Обработка следующей части договора')) return 1;
+  if (message.includes('структурный анализ')) return 2;
+  if (message.includes('отсутствующих требований')) return 3;
+  if (message.includes('Финализация')) return 4;
+  if (message.includes('завершен')) return 5;
   
   return 0;
 }
@@ -121,19 +128,35 @@ export function AnalysisProgress({ isAnalyzing, progress: progressMessage }: Ana
     const newProgress = getProgressFromMessage(progressMessage || '');
     const newStage = getCurrentStage(progressMessage || '');
     
+    // Обновляем этап сразу
+    setCurrentStage(newStage);
+    
     // Плавная анимация прогресса
+    let animationFrame: number;
     const animateProgress = () => {
       setProgress(prev => {
         const diff = newProgress - prev;
-        if (Math.abs(diff) < 0.5) return newProgress;
-        return prev + diff * 0.1; // Плавное изменение
+        if (Math.abs(diff) < 1) {
+          return newProgress; // Достигли цели
+        }
+        // Плавное движение к цели (10% от разности за кадр)
+        return prev + diff * 0.1;
       });
+      
+      // Продолжаем анимацию пока не достигнем цели
+      if (Math.abs(newProgress - progress) >= 1) {
+        animationFrame = requestAnimationFrame(animateProgress);
+      }
     };
 
-    const interval = setInterval(animateProgress, 50);
-    setCurrentStage(newStage);
-
-    return () => clearInterval(interval);
+    // Запускаем анимацию
+    animationFrame = requestAnimationFrame(animateProgress);
+    
+    return () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
   }, [isAnalyzing, progressMessage]);
 
   // Не показываем если анализ не идет

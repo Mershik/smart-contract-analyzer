@@ -355,13 +355,18 @@ async function processChunksInParallel(
   
   console.log(`📋 Начинаем параллельную обработку ${chunks.length} чанков (батчи по ${batchSize}, пауза ${batchDelay}ms)`);
   
+  let processedChunks = 0;
+  const totalChunks = chunks.length;
+  
   // Разбиваем чанки на батчи
   for (let i = 0; i < chunks.length; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
     const batchNumber = Math.floor(i / batchSize) + 1;
     const totalBatches = Math.ceil(chunks.length / batchSize);
     
-    onProgress(`Обработка батча ${batchNumber}/${totalBatches} (${batch.length} чанков параллельно)`);
+    // Показываем понятное сообщение пользователю
+    const percentComplete = Math.round((processedChunks / totalChunks) * 100);
+    onProgress(`Анализ содержимого договора... ${percentComplete}% завершено`);
     
     console.log(`🚀 Запускаем батч ${batchNumber}: чанки ${i + 1}-${Math.min(i + batchSize, chunks.length)}`);
     
@@ -388,6 +393,7 @@ async function processChunksInParallel(
       batchResults.forEach((result, batchIndex) => {
         if (result.status === 'fulfilled') {
           results[result.value.index] = result.value.result;
+          processedChunks++;
         } else {
           const chunkNumber = i + batchIndex + 1;
           console.error(`❌ Батч ${batchNumber}, чанк ${chunkNumber} завершился с ошибкой:`, result.reason);
@@ -397,13 +403,17 @@ async function processChunksInParallel(
       
       console.log(`✅ Батч ${batchNumber} завершен успешно (${batch.length} чанков)`);
       
+      // Обновляем прогресс после завершения батча
+      const updatedPercent = Math.round((processedChunks / totalChunks) * 100);
+      onProgress(`Анализ содержимого договора... ${updatedPercent}% завершено`);
+      
       // Пауза между батчами (кроме последнего)
       if (i + batchSize < chunks.length) {
         const availableKeys = keyPool.getAvailableKeyCount();
         const actualDelay = availableKeys > 6 ? batchDelay * 0.7 : batchDelay; // Сокращаем задержку если много ключей
         
         console.log(`⏱️ Пауза ${actualDelay}ms между батчами (доступно ключей: ${availableKeys})`);
-        onProgress(`Пауза между батчами... (${actualDelay}ms)`);
+        onProgress(`Обработка следующей части договора...`);
         await new Promise(resolve => setTimeout(resolve, actualDelay));
       }
       
