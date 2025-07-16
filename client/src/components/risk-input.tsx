@@ -1,48 +1,35 @@
-import { AlertTriangle, ChevronUp, ChevronDown } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 
 interface RiskInputProps {
   value: string;
-  onChange: (_value: string) => void;
-  perspective?: 'buyer' | 'supplier';
+  onChange: (value: string) => void;
+  perspective: 'buyer' | 'supplier';
 }
 
-export function RiskInput({ value, onChange, perspective = 'buyer' }: RiskInputProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  const toggleCollapse = () => {
-    setIsCollapsed(!isCollapsed);
-  };
-
-  const title = perspective === 'buyer' 
-    ? 'Список рисков для покупателя'
-    : 'Список рисков для поставщика';
-
+export function RiskInput({ value, onChange, perspective }: RiskInputProps) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-          <AlertTriangle className="text-red-600 mr-2" size={20} />
-          {title}
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="flex items-center mb-4">
+        <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center mr-3">
+          <AlertTriangle className="text-red-600" size={16} />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900">
+          Критические риски ({perspective === 'buyer' ? 'покупатель' : 'поставщик'})
         </h3>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={toggleCollapse}
-          className="text-sm hf-orange-text hover:text-orange-700 transition-colors"
-        >
-          {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-        </Button>
       </div>
-      <Textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`w-full p-4 border border-gray-200 rounded-lg text-sm leading-relaxed resize-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all ${
-          isCollapsed ? 'h-20' : 'h-40'
-        }`}
-      />
+      
+      <div className="space-y-4">
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={12}
+          className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-vertical text-sm leading-relaxed"
+          placeholder="Введите критические риски договора..."
+        />
+      </div>
     </div>
   );
 }

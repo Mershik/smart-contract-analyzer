@@ -16,11 +16,11 @@ export function PerspectiveSelector({ perspective, onPerspectiveChange }: Perspe
         Перспектива анализа
       </h3>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="space-y-3">
         <Button
           variant={perspective === 'buyer' ? 'default' : 'outline'}
           onClick={() => onPerspectiveChange('buyer')}
-          className={`px-4 py-3 flex items-center justify-center space-x-2 ${
+          className={`w-full px-4 py-3 flex items-center justify-center space-x-2 ${
             perspective === 'buyer' 
               ? 'hf-orange-bg hover:hf-orange-bg text-white' 
               : 'hover:border-orange-300 hover:bg-orange-50'
@@ -33,7 +33,7 @@ export function PerspectiveSelector({ perspective, onPerspectiveChange }: Perspe
         <Button
           variant={perspective === 'supplier' ? 'default' : 'outline'}
           onClick={() => onPerspectiveChange('supplier')}
-          className={`px-4 py-3 flex items-center justify-center space-x-2 ${
+          className={`w-full px-4 py-3 flex items-center justify-center space-x-2 ${
             perspective === 'supplier' 
               ? 'hf-orange-bg hover:hf-orange-bg text-white' 
               : 'hover:border-orange-300 hover:bg-orange-50'
