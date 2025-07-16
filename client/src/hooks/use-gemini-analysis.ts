@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { analyzeContractWithGemini } from "@/lib/gemini";
-import type { ContractParagraph,  StructuralAnalysis, Contradiction} from "@shared/schema";
+import type { ContractParagraph, StructuralAnalysis, Contradiction, RightsImbalance} from "@shared/schema";
 
 export function useGeminiAnalysis() {
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +18,8 @@ export function useGeminiAnalysis() {
     missingRequirements: ContractParagraph[], 
     ambiguousConditions: ContractParagraph[],
     structuralAnalysis: StructuralAnalysis,
-    contradictions: Contradiction[]
+    contradictions: Contradiction[],
+    rightsImbalance: RightsImbalance[]
   }> => {
     setIsLoading(true);
     setError(null);
@@ -33,7 +34,7 @@ export function useGeminiAnalysis() {
     };
 
     try {
-      const { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions } = await analyzeContractWithGemini(
+      const { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions, rightsImbalance } = await analyzeContractWithGemini(
         contractText, 
         checklistText, 
         riskText, 
@@ -50,7 +51,7 @@ export function useGeminiAnalysis() {
           },
           body: JSON.stringify({
             contractText,
-            analysisResult: { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions },
+            analysisResult: { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions, rightsImbalance },
           }),
         });
       } catch (saveError) {
@@ -58,7 +59,7 @@ export function useGeminiAnalysis() {
         // Не прерываем выполнение, если сохранение не удалось
       }
       
-      return { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions };
+      return { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions, rightsImbalance };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Analysis failed";
       setError(errorMessage);

@@ -35,7 +35,7 @@ export type InsertContractAnalysis = z.infer<typeof insertContractAnalysisSchema
 export const analysisItemSchema = z.object({
   id: z.string(),
   status: z.string(),
-  category: z.enum(['checklist', 'risk', 'missing', 'other', 'partial', 'ambiguous', 'contradiction']),
+  category: z.enum(['checklist', 'risk', 'missing', 'other', 'partial', 'ambiguous', 'contradiction', 'deemed_acceptance', 'external_refs']),
   comment: z.string(),
 });
 
@@ -49,7 +49,7 @@ export type AnalysisResponse = z.infer<typeof analysisResponseSchema>;
 export interface ContractParagraph {
   id: string;
   text: string;
-  category?: 'checklist' | 'risk' | 'missing' | 'other' | 'partial' | 'ambiguous' | 'contradiction';
+  category?: 'checklist' | 'risk' | 'missing' | 'other' | 'partial' | 'ambiguous' | 'contradiction' | 'deemed_acceptance' | 'external_refs';
   comment?: string;
   recommendation?: string;
   improvedClause?: string;
@@ -72,6 +72,17 @@ export interface Contradiction {
       value: string;
     };
   };
+  severity: 'high' | 'medium' | 'low';
+  recommendation: string;
+}
+
+// Новый тип для дисбаланса прав
+export interface RightsImbalance {
+  id: string;
+  type: 'termination_rights' | 'suspension_rights' | 'modification_rights' | 'refusal_rights' | 'control_rights';
+  description: string;
+  buyerRights: number;
+  supplierRights: number;
   severity: 'high' | 'medium' | 'low';
   recommendation: string;
 }

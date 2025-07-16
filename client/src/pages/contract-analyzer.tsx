@@ -9,8 +9,9 @@ import { StructuralAnalysisComponent } from "@/components/structural-analysis";
 import { Button } from "@/components/ui/button";
 import { useGeminiAnalysis } from "@/hooks/use-gemini-analysis";
 import { exportToDocx } from "@/lib/docx-export";
-import type { ContractParagraph, Contradiction } from "@shared/schema";
+import type { ContractParagraph, Contradiction, RightsImbalance } from "@shared/schema";
 import { ContradictionsResults } from "@/components/contradictions-results";
+import { RightsImbalanceResults } from "@/components/rights-imbalance-results";
 import { SidebarFilters } from "@/components/sidebar-filters";
 import { AnalysisPerspective } from "@/components/perspective-selector";
 
@@ -234,12 +235,14 @@ export default function ContractAnalyzer() {
   const [ambiguousConditions, setAmbiguousConditions] = useState<ContractParagraph[]>([]);
   const [structuralAnalysis, setStructuralAnalysis] = useState<any>(null);
   const [contradictions, setContradictions] = useState<Contradiction[]>([]);
+  const [rightsImbalance, setRightsImbalance] = useState<RightsImbalance[]>([]);
   const [showCompliance, setShowCompliance] = useState(true);
   const [showPartial, setShowPartial] = useState(true);
   const [showRisks, setShowRisks] = useState(true);
   const [showMissing, setShowMissing] = useState(true);
   const [showOther, setShowOther] = useState(true);
   const [showContradictions, setShowContradictions] = useState(true);
+  const [showRightsImbalance, setShowRightsImbalance] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const { analyzeContract, isLoading, error, progress } = useGeminiAnalysis();
@@ -275,6 +278,7 @@ export default function ContractAnalyzer() {
     setAmbiguousConditions([]);
     setStructuralAnalysis(null);
     setContradictions([]);
+    setRightsImbalance([]);
     
     // Обновляем чек-лист и риски в зависимости от перспективы
     if (newPerspective === 'buyer') {
@@ -295,7 +299,7 @@ export default function ContractAnalyzer() {
     setIsAnalyzing(true);
     
     try {
-      const { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions } = await analyzeContract(
+      const { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions, rightsImbalance } = await analyzeContract(
         contractText,
         checklistText,
         riskText,
@@ -310,6 +314,7 @@ export default function ContractAnalyzer() {
       setAmbiguousConditions(ambiguousConditions || []);
       setStructuralAnalysis(structuralAnalysis || null);
       setContradictions(contradictions || []);
+      setRightsImbalance(rightsImbalance || []);
       
       // Успешное завершение - останавливаем анализ
       setIsAnalyzing(false);
@@ -482,12 +487,14 @@ export default function ContractAnalyzer() {
             showMissing={showMissing}
             showOther={showOther}
             showContradictions={showContradictions}
+            showRightsImbalance={showRightsImbalance}
             onToggleCompliance={setShowCompliance}
             onTogglePartial={setShowPartial}
             onToggleRisks={setShowRisks}
             onToggleMissing={setShowMissing}
             onToggleOther={setShowOther}
             onToggleContradictions={setShowContradictions}
+            onToggleRightsImbalance={setShowRightsImbalance}
             hasResults={contractParagraphs.length > 0}
             complianceCount={complianceCount}
             partialCount={partialCount}
@@ -495,6 +502,7 @@ export default function ContractAnalyzer() {
             missingCount={missingCountTotal}
             otherCount={otherCount}
             contradictionsCount={contradictions.length}
+            rightsImbalanceCount={rightsImbalance.length}
           />
         </div>
 
@@ -540,12 +548,23 @@ export default function ContractAnalyzer() {
         )}
 
         {/* Contradictions Results */}
-        <div className="mt-6">
-          <ContradictionsResults
-            contradictions={contradictions}
-            showContradictions={showContradictions}
-          />
-        </div>
+        {contractParagraphs.length > 0 && (
+          <div className="mt-6">
+            <ContradictionsResults
+              contradictions={contradictions}
+              showContradictions={showContradictions}
+            />
+          </div>
+        )}
+
+        {/* Rights Imbalance Results */}
+        {contractParagraphs.length > 0 && (
+          <div className="mt-6">
+            <RightsImbalanceResults
+              rightsImbalance={rightsImbalance}
+            />
+          </div>
+        )}
       </div>
 
       {/* Analysis Progress */}
