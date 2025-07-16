@@ -12,10 +12,11 @@ import { exportToDocx } from "@/lib/docx-export";
 import type { ContractParagraph, Contradiction, RightsImbalance } from "@shared/schema";
 import { ContradictionsResults } from "@/components/contradictions-results";
 import { RightsImbalanceResults } from "@/components/rights-imbalance-results";
-import { SidebarFilters } from "@/components/sidebar-filters";
-import { AnalysisPerspective } from "@/components/perspective-selector";
+import { AnalysisPerspective, PerspectiveSelector } from "@/components/perspective-selector";
+import { TableOfContents } from "@/components/table-of-contents";
+import { FloatingFilters } from "@/components/floating-filters";
 
-// Требования и риски для ПОКУПАТЕЛЯ
+// ... (Ваши константы buyerChecklist, buyerRisks, и т.д. остаются без изменений) ...
 const buyerChecklist = `•	Определение товара: Порядок согласования наименования, количества, ассортимента и цены товара определяется через Заявки Покупателя, подтверждаемые Счетами/Спецификациями Поставщика.
 •	Обязательность Заявки: Установлен обязательный срок для Поставщика на рассмотрение и акцепт Заявки Покупателя (рекомендуется: 2-3 рабочих дня), а также последствия игнорирования Заявки (например, считается отказом).
 •	Сроки поставки: Установлены конкретные сроки поставки или четкий и однозначный механизм их определения для каждой партии (например, X дней с момента оплаты счета).
@@ -225,376 +226,400 @@ const defaultContractText = `
 11.3.	Стороны могут осуществлять документооборот, связанный с исполнением настоящего Договора, посредством системы электронного документооборота, с которой возможен роуминг документов из системы ЭДО.
 11.4.	Стороны признают юридическую силу за документами, подписываемыми аналогами собственноручной подписи, в том числе: счетами, УПД, актами сверки, письмами (уведомлениями). Электронные документы признаются эквивалентными соответствующим бумажным документам и порождают аналогичные им права и обязанности сторон.
 `;
+
 export default function ContractAnalyzer() {
-  const [contractText, setContractText] = useState("");
-  const [perspective, setPerspective] = useState<AnalysisPerspective>('buyer');
-  const [checklistText, setChecklistText] = useState(buyerChecklist);
-  const [riskText, setRiskText] = useState(buyerRisks);
-  const [contractParagraphs, setContractParagraphs] = useState<ContractParagraph[]>([]);
-  const [missingRequirements, setMissingRequirements] = useState<ContractParagraph[]>([]);
-  const [ambiguousConditions, setAmbiguousConditions] = useState<ContractParagraph[]>([]);
-  const [structuralAnalysis, setStructuralAnalysis] = useState<any>(null);
-  const [contradictions, setContradictions] = useState<Contradiction[]>([]);
-  const [rightsImbalance, setRightsImbalance] = useState<RightsImbalance[]>([]);
-  const [showCompliance, setShowCompliance] = useState(true);
-  const [showPartial, setShowPartial] = useState(true);
-  const [showRisks, setShowRisks] = useState(true);
-  const [showMissing, setShowMissing] = useState(true);
-  const [showOther, setShowOther] = useState(true);
-  const [showContradictions, setShowContradictions] = useState(true);
-  const [showRightsImbalance, setShowRightsImbalance] = useState(true);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [contractText, setContractText] = useState("");
+    const [perspective, setPerspective] = useState<AnalysisPerspective>('buyer');
+    const [checklistText, setChecklistText] = useState(buyerChecklist);
+    const [riskText, setRiskText] = useState(buyerRisks);
+    const [contractParagraphs, setContractParagraphs] = useState<ContractParagraph[]>([]);
+    const [missingRequirements, setMissingRequirements] = useState<ContractParagraph[]>([]);
+    const [ambiguousConditions, setAmbiguousConditions] = useState<ContractParagraph[]>([]);
+    const [structuralAnalysis, setStructuralAnalysis] = useState<any>(null);
+    const [contradictions, setContradictions] = useState<Contradiction[]>([]);
+    const [rightsImbalance, setRightsImbalance] = useState<RightsImbalance[]>([]);
+    const [showCompliance, setShowCompliance] = useState(true);
+    const [showPartial, setShowPartial] = useState(true);
+    const [showRisks, setShowRisks] = useState(true);
+    const [showMissing, setShowMissing] = useState(true);
+    const [showOther, setShowOther] = useState(true);
+    const [showContradictions, setShowContradictions] = useState(true);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const { analyzeContract, isLoading, error, progress } = useGeminiAnalysis();
-  
-  // Ссылка на раздел структурного анализа для автоматической прокрутки
-  const structuralAnalysisRef = useRef<HTMLDivElement>(null);
+    const { analyzeContract, isLoading, error, progress } = useGeminiAnalysis();
+    
+    // Ссылка на раздел структурного анализа для автоматической прокрутки
+    const structuralAnalysisRef = useRef<HTMLDivElement>(null);
 
-  // Автоматическая прокрутка к структурному анализу после завершения анализа
-  useEffect(() => {
-    if (structuralAnalysis && !isAnalyzing && structuralAnalysisRef.current) {
-      // Небольшая задержка для завершения рендеринга
-      setTimeout(() => {
-        if (structuralAnalysisRef.current) {
-          // Получаем позицию элемента
-          const elementTop = structuralAnalysisRef.current.offsetTop;
-          // Вычитаем высоту заголовка (64px) + дополнительный отступ (24px)
-          const offsetTop = elementTop - 88;
-          
-          window.scrollTo({
-            top: offsetTop,
-            behavior: 'smooth'
-          });
+    // Автоматическая прокрутка к структурному анализу после завершения анализа
+    useEffect(() => {
+        if (structuralAnalysis && !isAnalyzing && structuralAnalysisRef.current) {
+            // Небольшая задержка для завершения рендеринга
+            setTimeout(() => {
+                if (structuralAnalysisRef.current) {
+                    // Получаем позицию элемента
+                    const elementTop = structuralAnalysisRef.current.offsetTop;
+                    // Вычитаем высоту заголовка (64px) + дополнительный отступ (24px)
+                    const offsetTop = elementTop - 88;
+                    
+                    window.scrollTo({
+                        top: offsetTop,
+                        behavior: 'smooth'
+                    });
+                }
+            }, 300);
         }
-      }, 300);
-    }
-  }, [structuralAnalysis, isAnalyzing]);
+    }, [structuralAnalysis, isAnalyzing]);
 
-  const handlePerspectiveChange = (newPerspective: 'buyer' | 'supplier') => {
-    setPerspective(newPerspective);
-    // Сбрасываем результаты анализа при смене перспективы
-    setContractParagraphs([]);
-    setMissingRequirements([]);
-    setAmbiguousConditions([]);
-    setStructuralAnalysis(null);
-    setContradictions([]);
-    setRightsImbalance([]);
-    
-    // Обновляем чек-лист и риски в зависимости от перспективы
-    if (newPerspective === 'buyer') {
-      setChecklistText(buyerChecklist);
-      setRiskText(buyerRisks);
-    } else {
-      setChecklistText(supplierChecklist);
-      setRiskText(supplierRisks);
-    }
-  };
-
-  const handleAnalyze = async () => {
-    if (!contractText.trim() || !checklistText.trim()) {
-      alert("Пожалуйста, заполните текст договора и чек-лист");
-      return;
-    }
-
-    setIsAnalyzing(true);
-    
-    try {
-      const { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions, rightsImbalance } = await analyzeContract(
-        contractText,
-        checklistText,
-        riskText,
-        perspective,
-        (progressMessage: string) => {
-          console.log("Progress:", progressMessage);
+    const handlePerspectiveChange = (newPerspective: 'buyer' | 'supplier') => {
+        setPerspective(newPerspective);
+        // Сбрасываем результаты анализа при смене перспективы
+        setContractParagraphs([]);
+        setMissingRequirements([]);
+        setAmbiguousConditions([]);
+        setStructuralAnalysis(null);
+        setContradictions([]);
+        setRightsImbalance([]);
+        
+        // Обновляем чек-лист и риски в зависимости от перспективы
+        if (newPerspective === 'buyer') {
+            setChecklistText(buyerChecklist);
+            setRiskText(buyerRisks);
+        } else {
+            setChecklistText(supplierChecklist);
+            setRiskText(supplierRisks);
         }
-      );
-      
-      setContractParagraphs(contractParagraphs || []);
-      setMissingRequirements(missingRequirements || []);
-      setAmbiguousConditions(ambiguousConditions || []);
-      setStructuralAnalysis(structuralAnalysis || null);
-      setContradictions(contradictions || []);
-      setRightsImbalance(rightsImbalance || []);
-      
-      // Успешное завершение - останавливаем анализ
-      setIsAnalyzing(false);
-    } catch (error) {
-      console.error("Analysis failed:", error);
-      setIsAnalyzing(false);
-    }
-  };
+    };
 
-  const handleAnalysisComplete = () => {
-    // Прогресс-бар сам управляет своим состоянием
-    // Ничего не делаем здесь
-  };
+    const handleAnalyze = async () => {
+        if (!contractText.trim() || !checklistText.trim()) {
+            alert("Пожалуйста, заполните текст договора и чек-лист");
+            return;
+        }
 
-  const handleUpdateComment = (id: string, newComment: string) => {
-    setContractParagraphs(prev => 
-      prev.map(paragraph => 
-        paragraph.id === id 
-          ? { ...paragraph, comment: newComment }
-          : paragraph
-      )
-    );
-    
-    setMissingRequirements(prev => 
-      prev.map(requirement => 
-        requirement.id === id 
-          ? { ...requirement, comment: newComment }
-          : requirement
-      )
-    );
-    
-    setAmbiguousConditions(prev => 
-      prev.map(condition => 
-        condition.id === id 
-          ? { ...condition, comment: newComment }
-          : condition
-      )
-    );
-  };
+        setIsAnalyzing(true);
+        
+        try {
+            const { contractParagraphs, missingRequirements, ambiguousConditions, structuralAnalysis, contradictions, rightsImbalance } = await analyzeContract(
+                contractText,
+                checklistText,
+                riskText,
+                perspective,
+                (progressMessage: string) => {
+                    console.log("Progress:", progressMessage);
+                }
+            );
+            
+            setContractParagraphs(contractParagraphs || []);
+            setMissingRequirements(missingRequirements || []);
+            setAmbiguousConditions(ambiguousConditions || []);
+            setStructuralAnalysis(structuralAnalysis || null);
+            setContradictions(contradictions || []);
+            setRightsImbalance(rightsImbalance || []);
+            
+            // Успешное завершение - останавливаем анализ
+            setIsAnalyzing(false);
+        } catch (error) {
+            console.error("Analysis failed:", error);
+            setIsAnalyzing(false);
+        }
+    };
 
-  const handleSubmitFeedback = (feedback: any) => {
-    console.log('Feedback received:', feedback);
-    // Здесь можно отправить отзыв на сервер для дальнейшего анализа
-  };
+    const handleAnalysisComplete = () => {
+        // Прогресс-бар сам управляет своим состоянием
+        // Ничего не делаем здесь
+    };
 
-  const loadExample = () => {
-    setContractText(defaultContractText);
-  };
+    const handleUpdateComment = (id: string, newComment: string) => {
+        setContractParagraphs(prev => 
+            prev.map(paragraph => 
+                paragraph.id === id 
+                ? { ...paragraph, comment: newComment }
+                : paragraph
+            )
+        );
+        
+        setMissingRequirements(prev => 
+            prev.map(requirement => 
+                requirement.id === id 
+                ? { ...requirement, comment: newComment }
+                : requirement
+            )
+        );
+        
+        setAmbiguousConditions(prev => 
+            prev.map(condition => 
+                condition.id === id 
+                ? { ...condition, comment: newComment }
+                : condition
+            )
+        );
+    };
 
-  // Добавляем проверку на undefined
-  const filteredResults = (contractParagraphs || []).filter((paragraph) => {
-    if (!paragraph.category) return true;
-    if (paragraph.category === 'checklist' && !showCompliance) return false;
-    if (paragraph.category === 'partial' && !showPartial) return false;
-    if (paragraph.category === 'risk' && !showRisks) return false;
-    if (paragraph.category === 'missing' && !showMissing) return false;
-    if ((paragraph.category === 'other' || paragraph.category === 'ambiguous') && !showOther) return false;
-    return true;
-  });
+    const handleSubmitFeedback = (feedback: any) => {
+        console.log('Feedback received:', feedback);
+        // Здесь можно отправить отзыв на сервер для дальнейшего анализа
+    };
 
-  // Добавляем проверку на undefined
-  const complianceCount = (contractParagraphs || []).filter(p => p.category === 'checklist').length;
-  const partialCount = (contractParagraphs || []).filter(p => p.category === 'partial').length;
-  const riskCount = (contractParagraphs || []).filter(p => p.category === 'risk').length;
-  const missingCountFromParagraphs = (contractParagraphs || []).filter(p => p.category === 'missing').length;
-  const missingCountTotal = missingCountFromParagraphs + (missingRequirements || []).length;
-  const otherCount = (contractParagraphs || []).filter(p => p.category === 'other' || p.category === 'ambiguous').length;
+    const loadExample = () => {
+        setContractText(defaultContractText);
+    };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 hf-orange-bg rounded-lg flex items-center justify-center">
-                <File className="text-white text-sm" size={16} />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">AI Скрепка</h1>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="outline"
-                onClick={() => window.open('/analytics', '_blank')}
-                className="text-sm"
-              >
-                Аналитика качества
-              </Button>
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                <span>Gemini API подключен</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+    // Добавляем проверку на undefined
+    const filteredResults = (contractParagraphs || []).filter((paragraph) => {
+        if (!paragraph.category) return true;
+        if (paragraph.category === 'checklist' && !showCompliance) return false;
+        if (paragraph.category === 'partial' && !showPartial) return false;
+        if (paragraph.category === 'risk' && !showRisks) return false;
+        if (paragraph.category === 'missing' && !showMissing) return false;
+        if ((paragraph.category === 'other' || paragraph.category === 'ambiguous') && !showOther) return false;
+        return true;
+    });
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Hero Section */}
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">AI проверка договоров поставки</h2>
-          <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-          Установите корпоративные критерии, риски и обязательные условия.
-          </p>
-          <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-          Сервис проконтролирует, чтобы каждый договор поставки им соответствовал.
-          </p>
-        </div>
+    // Добавляем проверку на undefined
+    const complianceCount = (contractParagraphs || []).filter(p => p.category === 'checklist').length;
+    const partialCount = (contractParagraphs || []).filter(p => p.category === 'partial').length;
+    const riskCount = (contractParagraphs || []).filter(p => p.category === 'risk').length;
+    const missingCountFromParagraphs = (contractParagraphs || []).filter(p => p.category === 'missing').length;
+    const missingCountTotal = missingCountFromParagraphs + (missingRequirements || []).length;
+    const otherCount = (contractParagraphs || []).filter(p => p.category === 'other' || p.category === 'ambiguous').length;
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Input Panel */}
-          <div className="lg:col-span-2 space-y-6">
-            <ContractInput 
-              value={contractText} 
-              onChange={setContractText} 
-            />
-            <RequirementsInput 
-              value={checklistText} 
-              onChange={setChecklistText}
-              perspective={perspective}
-            />
-            <RiskInput 
-              value={riskText} 
-              onChange={setRiskText}
-              perspective={perspective}
-            />
-
-            {/* Analysis Button */}
-            <div className="flex flex-col items-center mt-6">
-              <Button 
-                onClick={handleAnalyze}
-                disabled={!contractText.trim() || isLoading || isAnalyzing}
-                className="hf-orange-bg hover:hf-orange-bg text-white px-8 py-4 h-auto text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
-              >
-                <ChartLine className="mr-2" size={20} />
-                {isAnalyzing ? 'Анализируем...' : 'Анализировать договор'}
-                <File className="ml-2" size={20} />
-              </Button>
-            </div>
-
-            {/* Examples Section */}
-            <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3">
-              <Button
-                onClick={loadExample}
-                variant="ghost"
-                className="w-full p-3 h-auto text-left hover:bg-gray-50 transition-all rounded-lg"
-              >
-                <div className="flex items-center">
-                  <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center mr-3">
-                    <File className="text-blue-600" size={16} />
-                  </div>
-                  <div>
-                    <div className="font-medium text-gray-900">Попробуйте пример договора</div>
-                    <div className="text-sm text-gray-500">Стандартный договор поставки товаров</div>
-                  </div>
+    return (
+        <div className="min-h-screen bg-gray-50">
+            {/* Header */}
+            <header className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex justify-between items-center h-16">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 hf-orange-bg rounded-lg flex items-center justify-center">
+                                <File className="text-white text-sm" size={16} />
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-semibold text-gray-900">AI Скрепка</h1>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                            <Button
+                                variant="outline"
+                                onClick={() => window.open('/analytics', '_blank')}
+                                className="text-sm"
+                            >
+                                Аналитика качества
+                            </Button>
+                            <div className="flex items-center space-x-2 text-sm text-gray-600">
+                                <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+                                <span>Gemini API подключен</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-              </Button>
-            </div>
-          </div>
+            </header>
 
-          {/* Sidebar */}
-          <SidebarFilters
-            perspective={perspective}
-            onPerspectiveChange={handlePerspectiveChange}
-            showCompliance={showCompliance}
-            showPartial={showPartial}
-            showRisks={showRisks}
-            showMissing={showMissing}
-            showOther={showOther}
-            showContradictions={showContradictions}
-            showRightsImbalance={showRightsImbalance}
-            onToggleCompliance={setShowCompliance}
-            onTogglePartial={setShowPartial}
-            onToggleRisks={setShowRisks}
-            onToggleMissing={setShowMissing}
-            onToggleOther={setShowOther}
-            onToggleContradictions={setShowContradictions}
-            onToggleRightsImbalance={setShowRightsImbalance}
-            hasResults={contractParagraphs.length > 0}
-            complianceCount={complianceCount}
-            partialCount={partialCount}
-            riskCount={riskCount}
-            missingCount={missingCountTotal}
-            otherCount={otherCount}
-            contradictionsCount={contradictions.length}
-            rightsImbalanceCount={rightsImbalance.length}
-          />
-        </div>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Hero Section */}
+                <div className="text-center mb-12">
+                    <h2 className="text-3xl font-bold text-gray-900 mb-4">AI проверка договоров поставки</h2>
+                    <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+                        Установите корпоративные критерии, риски и обязательные условия.
+                    </p>
+                    <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+                        Сервис проконтролирует, чтобы каждый договор поставки им соответствовал.
+                    </p>
+                </div>
 
-        {/* Error Display */}
-        {error && (
-          <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-6">
-            <div className="flex items-center">
-              <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center mr-3">
-                <span className="text-red-600 text-sm">⚠</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-red-800">Ошибка анализа</h3>
-                <p className="text-red-600 mt-1">{error}</p>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {/* Structural Analysis */}
-        {structuralAnalysis && (
-          <div className="mt-6" ref={structuralAnalysisRef}>
-            <StructuralAnalysisComponent analysis={structuralAnalysis} />
-          </div>
-        )}
-        
-        {/* Results */}
-        {contractParagraphs.length > 0 && (
-          <div className="mt-6">
-            <AnalysisResults
-              contractParagraphs={contractParagraphs}
-              missingRequirements={missingRequirements}
-              ambiguousConditions={ambiguousConditions}
-              showCompliance={showCompliance}
-              showPartial={showPartial}
-              showRisks={showRisks}
-              showOther={showOther}
-              showMissing={showMissing}
-              exportToDocx={() => exportToDocx(contractParagraphs)}
-              onUpdateComment={handleUpdateComment}
-              onSubmitFeedback={handleSubmitFeedback}
-            />
-          </div>
-        )}
+                <div className="space-y-8">
+                    {/* Input Panel - Full Width */}
+                    <div className="space-y-6">
+                        {/* Contract Input and Perspective Selection in parallel */}
+                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                            <div className="lg:col-span-3">
+                                <ContractInput
+                                    value={contractText}
+                                    onChange={setContractText}
+                                />
+                            </div>
+                            <div className="lg:col-span-1">
+                                <PerspectiveSelector
+                                    perspective={perspective}
+                                    onPerspectiveChange={handlePerspectiveChange}
+                                />
+                            </div>
+                        </div>
 
-        {/* Contradictions Results */}
-        {contractParagraphs.length > 0 && (
-          <div className="mt-6">
-            <ContradictionsResults
-              contradictions={contradictions}
-              showContradictions={showContradictions}
-            />
-          </div>
-        )}
+                        {/* Requirements and Risks in parallel */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <RequirementsInput
+                                value={checklistText}
+                                onChange={setChecklistText}
+                                perspective={perspective}
+                            />
+                            <RiskInput
+                                value={riskText}
+                                onChange={setRiskText}
+                                perspective={perspective}
+                            />
+                        </div>
 
-        {/* Rights Imbalance Results */}
-        {contractParagraphs.length > 0 && (
-          <div className="mt-6">
-            <RightsImbalanceResults
-              rightsImbalance={rightsImbalance}
-            />
-          </div>
-        )}
-      </div>
+                        {/* Analysis Button */}
+                        <div className="flex flex-col items-center mt-6">
+                            <Button
+                                onClick={handleAnalyze}
+                                disabled={!contractText.trim() || isLoading || isAnalyzing}
+                                className="hf-orange-bg hover:hf-orange-bg text-white px-8 py-4 h-auto text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
+                            >
+                                <ChartLine className="mr-2" size={20} />
+                                {isAnalyzing ? 'Анализируем...' : 'Анализировать договор'}
+                                <File className="ml-2" size={20} />
+                            </Button>
+                        </div>
 
-      {/* Analysis Progress */}
-      <AnalysisProgress 
-        isAnalyzing={isAnalyzing} 
-        onComplete={handleAnalysisComplete}
-        progress={progress}
-      />
+                        {/* Examples Section */}
+                        <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+                            <Button
+                                onClick={loadExample}
+                                variant="ghost"
+                                className="w-full p-3 h-auto text-left hover:bg-gray-50 transition-all rounded-lg"
+                            >
+                                <div className="flex items-center">
+                                    <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center mr-3">
+                                        <File className="text-blue-600" size={16} />
+                                    </div>
+                                    <div>
+                                        <div className="font-medium text-gray-900">Попробуйте пример договора</div>
+                                        <div className="text-sm text-gray-500">Стандартный договор поставки товаров</div>
+                                    </div>
+                                </div>
+                            </Button>
+                        </div>
+                    </div>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center">
-            <p className="text-sm text-gray-600">
-              Проект телеграм-канала{' '}
-              <a 
-                href="https://t.me/+plgepYs_y0M3ODJi" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="hf-orange-text hover:text-orange-700 font-medium transition-colors"
-              >
-                "AI Скрепка: Связь Права и Технологий"
-              </a>
-            </p>
-            <p className="text-xs text-gray-500 mt-2">
-              Разработчик: Мирошниченко Евгений — старший юрист в консалтинге и энтузиаст новых технологий
-            </p>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
+
+                    {/* Error Display */}
+                    {error && (
+                        <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-6">
+                            <div className="flex items-center">
+                                <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center mr-3">
+                                    <span className="text-red-600 text-sm">⚠</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-red-800">Ошибка анализа</h3>
+                                    <p className="text-red-600 mt-1">{error}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* Results Layout with Table of Contents */}
+                    {(structuralAnalysis || contractParagraphs.length > 0) && (
+                        <div className="mt-6 grid grid-cols-1 lg:grid-cols-4 gap-8">
+                            {/* Main Content - narrower */}
+                            <div className="lg:col-span-3 space-y-6">
+                                {/* Structural Analysis */}
+                                {structuralAnalysis && (
+                                    <div id="structural-analysis" ref={structuralAnalysisRef}>
+                                        <StructuralAnalysisComponent analysis={structuralAnalysis} />
+                                    </div>
+                                )}
+                                
+                                {/* Results */}
+                                {contractParagraphs.length > 0 && (
+                                    <div id="analysis-results">
+                                        <AnalysisResults
+                                            contractParagraphs={contractParagraphs}
+                                            missingRequirements={missingRequirements}
+                                            ambiguousConditions={ambiguousConditions}
+                                            showCompliance={showCompliance}
+                                            showPartial={showPartial}
+                                            showRisks={showRisks}
+                                            showOther={showOther}
+                                            showMissing={showMissing}
+                                            exportToDocx={() => exportToDocx(contractParagraphs)}
+                                            onUpdateComment={handleUpdateComment}
+                                            onSubmitFeedback={handleSubmitFeedback}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Contradictions Results */}
+                                {contractParagraphs.length > 0 && (
+                                    <div id="contradictions-results">
+                                        <ContradictionsResults
+                                            contradictions={contradictions}
+                                            showContradictions={showContradictions}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Rights Imbalance Results */}
+                                {contractParagraphs.length > 0 && (
+                                    <div id="rights-imbalance-results">
+                                        <RightsImbalanceResults
+                                            rightsImbalance={rightsImbalance}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Table of Contents and Filters - Right Sidebar */}
+                            <div className="lg:col-span-1">
+                                <TableOfContents
+                                    hasStructuralAnalysis={!!structuralAnalysis}
+                                    hasResults={contractParagraphs.length > 0}
+                                    hasContradictions={contradictions.length > 0}
+                                    hasRightsImbalance={rightsImbalance.length > 0}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Floating Filters - убираем дублирование */}
+                    <FloatingFilters
+                        showCompliance={showCompliance}
+                        showPartial={showPartial}
+                        showRisks={showRisks}
+                        showMissing={showMissing}
+                        showOther={showOther}
+                        showContradictions={showContradictions}
+                        onToggleCompliance={setShowCompliance}
+                        onTogglePartial={setShowPartial}
+                        onToggleRisks={setShowRisks}
+                        onToggleMissing={setShowMissing}
+                        onToggleOther={setShowOther}
+                        onToggleContradictions={setShowContradictions}
+                        complianceCount={complianceCount}
+                        partialCount={partialCount}
+                        riskCount={riskCount}
+                        missingCount={missingCountTotal}
+                        otherCount={otherCount}
+                        contradictionsCount={contradictions.length}
+                    />
+                    <AnalysisProgress
+                        isAnalyzing={isAnalyzing}
+                        onComplete={handleAnalysisComplete}
+                        progress={progress}
+                    />
+                    <footer className="bg-white border-t border-gray-200 mt-16">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                            <div className="text-center">
+                                <p className="text-sm text-gray-600">
+                                    Проект телеграм-канала{' '}
+                                    <a
+                                        href="https://t.me/+plgepYs_y0M3ODJi"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="hf-orange-text hover:text-orange-700 font-medium transition-colors"
+                                    >
+                                        "AI Скрепка: Связь Права и Технологий"
+                                    </a>
+                                </p>
+                                <p className="text-xs text-gray-500 mt-2">
+                                    Разработчик: Мирошниченко Евгений — старший юрист в консалтинге и энтузиаст новых технологий
+                                </p>
+                            </div>
+                        </div>
+                    </footer>
+                </div> {/* ИСПРАВЛЕНИЕ: Закрывающий тег для <div className="space-y-8"> */}
+            </div> {/* ИСПРАВЛЕНИЕ: Закрывающий тег для <div className="max-w-7xl ..."> */}
+        </div> // ИСПРАВЛЕНИЕ: Закрывающий тег для корневого <div className="min-h-screen bg-gray-50">
+    );
 }
