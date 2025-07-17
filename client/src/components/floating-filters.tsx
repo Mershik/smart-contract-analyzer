@@ -43,37 +43,8 @@ export function FloatingFilters({
   otherCount,
   contradictionsCount,
 }: FloatingFiltersProps) {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        // Показываем фильтр когда блок анализа попадает в видимость
-        setIsVisible(entry.isIntersecting);
-      },
-      {
-        rootMargin: "0px 0px -10% 0px", // Упрощаем margins
-        threshold: 0.1,
-      }
-    );
-
-    const analysisSection = document.getElementById("analysis-results");
-    if (analysisSection) {
-      observer.observe(analysisSection);
-      console.log("📍 FloatingFilters: IntersectionObserver подключен к #analysis-results");
-    } else {
-      console.warn("⚠️ FloatingFilters: Элемент #analysis-results не найден");
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  if (!isVisible) {
-    return null;
-  }
-
   return (
-    <div className="fixed top-24 right-6 z-40 w-64 bg-white rounded-lg shadow-lg border border-gray-200 p-4 max-h-[calc(100vh-120px)] overflow-y-auto">
+    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
         <Filter className="mr-2 text-blue-600" size={20} />
         Фильтры результатов

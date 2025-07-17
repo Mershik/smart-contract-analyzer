@@ -12,6 +12,7 @@ interface TableOfContentsProps {
   hasResults: boolean;
   hasContradictions: boolean;
   hasRightsImbalance: boolean;
+  hasMissingRequirements: boolean; // добавлено
 }
 
 export function TableOfContents({
@@ -19,6 +20,7 @@ export function TableOfContents({
   hasResults,
   hasContradictions,
   hasRightsImbalance,
+  hasMissingRequirements, // добавлено
 }: TableOfContentsProps) {
   const [activeSection, setActiveSection] = useState<string>("");
 
@@ -33,6 +35,11 @@ export function TableOfContents({
       id: "analysis-results", 
       title: "Анализ по абзацам", 
       icon: List
+    }] : []),
+    ...(hasMissingRequirements ? [{
+      id: "missing-requirements",
+      title: "Отсутствующие требования",
+      icon: AlertTriangle
     }] : []),
     ...(hasContradictions ? [{ 
       id: "contradictions-results", 

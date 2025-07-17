@@ -1309,7 +1309,13 @@ ${rightsRelatedItems.map(item => `- ${item.id}: ${item.text}${item.comment ? ` (
     
     console.log(`📊 DEBUG findRightsImbalance: Парсю ответ...`);
     const parsedResult = extractJsonFromResponse(rawResponse);
-    const rightsImbalance = parsedResult.rightsImbalance || [];
+    // Универсальная обработка: поддержка и объекта, и массива
+    let rightsImbalance = [];
+    if (Array.isArray(parsedResult)) {
+      rightsImbalance = parsedResult;
+    } else if (parsedResult && parsedResult.rightsImbalance) {
+      rightsImbalance = parsedResult.rightsImbalance;
+    }
     
     console.log(`🔍 DEBUG findRightsImbalance: Найдено дисбалансов прав: ${rightsImbalance.length}`);
     console.log(`✅ ЗАВЕРШЕНИЕ функции findRightsImbalance: Анализ дисбаланса прав`);
