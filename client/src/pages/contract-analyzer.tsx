@@ -15,6 +15,7 @@ import { RightsImbalanceResults } from "@/components/rights-imbalance-results";
 import { AnalysisPerspective, PerspectiveSelector } from "@/components/perspective-selector";
 import { TableOfContents } from "@/components/table-of-contents";
 import { FloatingFilters } from "@/components/floating-filters";
+import { QualityFeedback } from "@/components/quality-feedback";
 
 // ... (Ваши константы buyerChecklist, buyerRisks, и т.д. остаются без изменений) ...
 const buyerChecklist = `•	Определение товара: Порядок согласования наименования, количества, ассортимента и цены товара определяется через Заявки Покупателя, подтверждаемые Счетами/Спецификациями Поставщика.
@@ -245,6 +246,7 @@ export default function ContractAnalyzer() {
     const [showOther, setShowOther] = useState(true);
     const [showContradictions, setShowContradictions] = useState(true);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [isFiltersVisible, setIsFiltersVisible] = useState(false);
 
     const { analyzeContract, isLoading, error, progress } = useGeminiAnalysis();
     
@@ -270,6 +272,20 @@ export default function ContractAnalyzer() {
             }, 300);
         }
     }, [structuralAnalysis, isAnalyzing]);
+
+    useEffect(() => {
+        const analysisSection = document.getElementById("analysis-results");
+        if (!analysisSection) {
+            setIsFiltersVisible(false);
+            return;
+        }
+        const observer = new window.IntersectionObserver(
+            ([entry]) => setIsFiltersVisible(entry.isIntersecting),
+            { threshold: 0.1 }
+        );
+        observer.observe(analysisSection);
+        return () => observer.disconnect();
+    }, [contractParagraphs.length]);
 
     const handlePerspectiveChange = (newPerspective: 'buyer' | 'supplier') => {
         setPerspective(newPerspective);
@@ -540,6 +556,11 @@ export default function ContractAnalyzer() {
                                     </div>
                                 )}
 
+                                {/* Отсутствующие требования — отдельный id для якоря */}
+                                {missingRequirements.length > 0 && (
+                                    <div id="missing-requirements" />
+                                )}
+
                                 {/* Contradictions Results */}
                                 {contractParagraphs.length > 0 && (
                                     <div id="contradictions-results">
@@ -561,65 +582,78 @@ export default function ContractAnalyzer() {
                             </div>
 
                             {/* Table of Contents and Filters - Right Sidebar */}
-                            <div className="lg:col-span-1">
+                            <div className="lg:col-span-1 flex flex-col gap-6">
                                 <TableOfContents
                                     hasStructuralAnalysis={!!structuralAnalysis}
                                     hasResults={contractParagraphs.length > 0}
                                     hasContradictions={contradictions.length > 0}
                                     hasRightsImbalance={rightsImbalance.length > 0}
+                                    hasMissingRequirements={missingRequirements.length > 0}
                                 />
+                                {/* Фильтр — обычный блочный элемент, появляется только при просмотре раздела 'Анализ по абзацам' */}
+                                {isFiltersVisible && (
+                                    <FloatingFilters
+                                        showCompliance={showCompliance}
+                                        showPartial={showPartial}
+                                        showRisks={showRisks}
+                                        showMissing={showMissing}
+                                        showOther={showOther}
+                                        showContradictions={showContradictions}
+                                        onToggleCompliance={setShowCompliance}
+                                        onTogglePartial={setShowPartial}
+                                        onToggleRisks={setShowRisks}
+                                        onToggleMissing={setShowMissing}
+                                        onToggleOther={setShowOther}
+                                        onToggleContradictions={setShowContradictions}
+                                        complianceCount={complianceCount}
+                                        partialCount={partialCount}
+                                        riskCount={riskCount}
+                                        missingCount={missingCountTotal}
+                                        otherCount={otherCount}
+                                        contradictionsCount={contradictions.length}
+                                    />
+                                )}
                             </div>
                         </div>
                     )}
 
-                    {/* Floating Filters - убираем дублирование */}
-                    <FloatingFilters
-                        showCompliance={showCompliance}
-                        showPartial={showPartial}
-                        showRisks={showRisks}
-                        showMissing={showMissing}
-                        showOther={showOther}
-                        showContradictions={showContradictions}
-                        onToggleCompliance={setShowCompliance}
-                        onTogglePartial={setShowPartial}
-                        onToggleRisks={setShowRisks}
-                        onToggleMissing={setShowMissing}
-                        onToggleOther={setShowOther}
-                        onToggleContradictions={setShowContradictions}
-                        complianceCount={complianceCount}
-                        partialCount={partialCount}
-                        riskCount={riskCount}
-                        missingCount={missingCountTotal}
-                        otherCount={otherCount}
-                        contradictionsCount={contradictions.length}
-                    />
                     <AnalysisProgress
                         isAnalyzing={isAnalyzing}
                         onComplete={handleAnalysisComplete}
                         progress={progress}
                     />
-                    <footer className="bg-white border-t border-gray-200 mt-16">
-                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                            <div className="text-center">
-                                <p className="text-sm text-gray-600">
-                                    Проект телеграм-канала{' '}
-                                    <a
-                                        href="https://t.me/+plgepYs_y0M3ODJi"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="hf-orange-text hover:text-orange-700 font-medium transition-colors"
-                                    >
-                                        "AI Скрепка: Связь Права и Технологий"
-                                    </a>
-                                </p>
-                                <p className="text-xs text-gray-500 mt-2">
-                                    Разработчик: Мирошниченко Евгений — старший юрист в консалтинге и энтузиаст новых технологий
-                                </p>
-                            </div>
+                    {/* Оцените качество анализа — всегда в самом конце */}
+                    {(structuralAnalysis || contractParagraphs.length > 0) && (
+                        <div className="mt-12">
+                            <QualityFeedback 
+                                analysisId={`analysis_${Date.now()}`}
+                                onSubmitFeedback={handleSubmitFeedback}
+                            />
                         </div>
-                    </footer>
-                </div> {/* ИСПРАВЛЕНИЕ: Закрывающий тег для <div className="space-y-8"> */}
-            </div> {/* ИСПРАВЛЕНИЕ: Закрывающий тег для <div className="max-w-7xl ..."> */}
+                    )}
+                </div>
+            </div>
+            {/* Footer */}
+            <footer className="bg-white border-t border-gray-200 mt-16">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    <div className="text-center">
+                        <p className="text-sm text-gray-600">
+                            Проект телеграм-канала{' '}
+                            <a
+                                href="https://t.me/+plgepYs_y0M3ODJi"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hf-orange-text hover:text-orange-700 font-medium transition-colors"
+                            >
+                                "AI Скрепка: Связь Права и Технологий"
+                            </a>
+                        </p>
+                        <p className="text-xs text-gray-500 mt-2">
+                            Разработчик: Мирошниченко Евгений — старший юрист в консалтинге и энтузиаст новых технологий
+                        </p>
+                    </div>
+                </div>
+            </footer>
         </div> // ИСПРАВЛЕНИЕ: Закрывающий тег для корневого <div className="min-h-screen bg-gray-50">
     );
 }

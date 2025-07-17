@@ -88,7 +88,7 @@ export function AnalysisResults({
 
       {/* Отсутствующие требования */}
       {showMissing && missingRequirements.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow border">
+        <div className="bg-white p-6 rounded-lg shadow border" id="missing-requirements">
           <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
             <AlertTriangle className="w-5 h-5 mr-2 text-orange-500" />
             Отсутствующие требования ({missingRequirements.length})
@@ -111,12 +111,7 @@ export function AnalysisResults({
       )}
       
       {/* Quality Feedback */}
-      <div className="mt-8">
-        <QualityFeedback 
-          analysisId={`analysis_${Date.now()}`}
-          onSubmitFeedback={_onSubmitFeedback}
-        />
-      </div>
+      {/* УДАЛЕНО: <div className="mt-8">...</div> */}
     </div>
   );
 }
