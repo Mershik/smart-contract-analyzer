@@ -15,7 +15,7 @@ const ANALYSIS_STAGES = [
     label: 'Подготовка данных',
     description: 'Разбивка договора на абзацы и подготовка данных',
     icon: FileText,
-    keywords: ['Подготовка данных'],
+    keywords: ['Этап 1/7', 'Подготовка данных'],
     progressRange: [0, 10]
   },
   {
@@ -23,47 +23,47 @@ const ANALYSIS_STAGES = [
     label: 'Анализ содержимого',
     description: 'Проверка пунктов договора на соответствие требованиям',
     icon: Brain,
-    keywords: ['Анализ содержимого договора', 'Обработка следующей части договора'],
+    keywords: ['Этап 2/7', 'Анализ содержимого договора', 'Обработка следующей части договора'],
     progressRange: [10, 50]
-  },
-  {
-    id: 'structure',
-    label: 'Структурный анализ',
-    description: 'Оценка общей структуры и полноты договора',
-    icon: Search,
-    keywords: ['структурный анализ'],
-    progressRange: [50, 60]
   },
   {
     id: 'requirements',
     label: 'Поиск отсутствующих требований',
     description: 'Выявление отсутствующих обязательных условий',
     icon: Search,
-    keywords: ['отсутствующих требований'],
-    progressRange: [60, 70]
+    keywords: ['Этап 3/7', 'отсутствующих требований'],
+    progressRange: [50, 65]
   },
   {
     id: 'contradictions',
     label: 'Поиск противоречий',
     description: 'Поиск противоречий между пунктами договора',
     icon: Clock,
-    keywords: ['противоречий'],
-    progressRange: [70, 80]
+    keywords: ['Этап 4/7', 'противоречий'],
+    progressRange: [65, 75]
   },
   {
     id: 'imbalance',
     label: 'Анализ дисбаланса прав',
     description: 'Анализ дисбаланса прав сторон',
     icon: Zap,
-    keywords: ['дисбаланса прав'],
-    progressRange: [80, 95]
+    keywords: ['Этап 5/7', 'дисбаланса прав'],
+    progressRange: [75, 85]
+  },
+  {
+    id: 'structure',
+    label: 'Итоговый структурный анализ',
+    description: 'Формирование сводки с учетом всех найденных проблем',
+    icon: Search,
+    keywords: ['Этап 6/7', 'итогового структурного анализа', 'Формирование итогового'],
+    progressRange: [85, 95]
   },
   {
     id: 'finalization',
     label: 'Финализация',
     description: 'Объединение результатов и подготовка отчета',
     icon: Zap,
-    keywords: ['Финализация'],
+    keywords: ['Этап 7/7', 'Финализация'],
     progressRange: [95, 100]
   },
   {

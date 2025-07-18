@@ -255,6 +255,61 @@ function extractJsonFromResponse(rawResponse: string): any {
         }
       }
       
+      // Улучшенная попытка восстановления обрезанного JSON для анализа чанков
+      if (rawResponse.includes('"chunkId"') && rawResponse.includes('"analysis"')) {
+        console.log("🔧 Пытаемся восстановить обрезанный JSON анализа чанка");
+        
+        // Извлекаем chunkId
+        const chunkIdMatch = rawResponse.match(/"chunkId":\s*"([^"]+)"/);
+        const chunkId = chunkIdMatch ? chunkIdMatch[1] : "unknown";
+        
+        // Пытаемся найти все завершенные объекты анализа
+        const analysisObjects: any[] = [];
+        
+        // Ищем завершенные объекты анализа с помощью регулярного выражения
+        const analysisPattern = /{[^}]*"id":\s*"[^"]+",\s*"category":\s*"[^"]*"[^}]*}/g;
+        let match;
+        while ((match = analysisPattern.exec(rawResponse)) !== null) {
+          try {
+            const analysisObj = JSON.parse(match[0]);
+            analysisObjects.push(analysisObj);
+            console.log(`🔧 Восстановлен объект анализа: ${analysisObj.id}`);
+          } catch (e) {
+            // Пропускаем невалидные объекты
+          }
+        }
+        
+        // Если нашли хотя бы один объект анализа, возвращаем результат
+        if (analysisObjects.length > 0) {
+          console.log(`✅ Восстановлено ${analysisObjects.length} объектов анализа для ${chunkId}`);
+          return {
+            chunkId: chunkId,
+            analysis: analysisObjects
+          };
+        }
+        
+        // Если не удалось восстановить объекты, пытаемся найти хотя бы ID и категории
+        const simpleAnalysisPattern = /"id":\s*"([^"]+)",\s*"category":\s*"([^"]*)"/g;
+        const simpleObjects: any[] = [];
+        
+        while ((match = simpleAnalysisPattern.exec(rawResponse)) !== null) {
+          simpleObjects.push({
+            id: match[1],
+            category: match[2] || null,
+            comment: null,
+            recommendation: null
+          });
+        }
+        
+        if (simpleObjects.length > 0) {
+          console.log(`🔧 Восстановлено ${simpleObjects.length} упрощенных объектов анализа`);
+          return {
+            chunkId: chunkId,
+            analysis: simpleObjects
+          };
+        }
+      }
+      
       // Попытка найти хотя бы частичный валидный JSON для обычного анализа
       const jsonMatches = rawResponse.match(/{[^}]*"chunkId"[^}]*}/g);
       if (jsonMatches && jsonMatches.length > 0) {
@@ -461,7 +516,7 @@ JSON:
         generationConfig: {
           responseMimeType: "application/json",
           temperature: 0.1,
-          maxOutputTokens: 8000,
+          maxOutputTokens: 8000, // Возвращаем обратно - проблема не в лимите
           topP: 0.95,
           topK: 64,
         },
@@ -487,11 +542,20 @@ JSON:
 
       // Проверяем причину завершения
       const finishReason = result.response?.candidates?.[0]?.finishReason;
+      const usageMetadata = result.response?.usageMetadata;
+      
+      console.log(`📊 ${chunk.id}: finishReason=${finishReason}, usageMetadata:`, usageMetadata);
+      
       if (finishReason && finishReason !== 'STOP') {
         console.warn(`⚠️ ${chunk.id}: Нестандартное завершение - ${finishReason}`);
         
         if (finishReason === 'MAX_TOKENS') {
-          console.warn(`⚠️ ${chunk.id}: Ответ обрезан из-за лимита токенов`);
+          console.warn(`⚠️ ${chunk.id}: Ответ обрезан из-за лимита токенов - попытаемся восстановить`);
+          // Продолжаем обработку, система восстановления JSON попытается извлечь данные
+        } else if (finishReason === 'OTHER') {
+          console.warn(`⚠️ ${chunk.id}: Завершение по неизвестной причине - возможно внутренние ограничения Gemini`);
+        } else if (finishReason === 'SAFETY') {
+          console.warn(`⚠️ ${chunk.id}: Завершение из-за фильтров безопасности`);
         }
       }
 
@@ -560,7 +624,7 @@ async function processChunksInParallel(
     
     // Показываем понятное сообщение пользователю
     const percentComplete = Math.round((processedChunks / totalChunks) * 100);
-    onProgress(`Анализ содержимого договора... ${percentComplete}% завершено`);
+    onProgress(`Этап 2/7: Анализ содержимого договора... ${percentComplete}% завершено`);
     
     console.log(`🚀 Запускаем батч ${batchNumber}: чанки ${i + 1}-${Math.min(i + batchSize, chunks.length)}`);
     
@@ -599,7 +663,7 @@ async function processChunksInParallel(
       
       // Обновляем прогресс после завершения батча
       const updatedPercent = Math.round((processedChunks / totalChunks) * 100);
-      onProgress(`Анализ содержимого договора... ${updatedPercent}% завершено`);
+      onProgress(`Этап 2/7: Анализ содержимого договора... ${updatedPercent}% завершено`);
       
       // Пауза между батчами (кроме последнего)
       if (i + batchSize < chunks.length) {
@@ -607,7 +671,7 @@ async function processChunksInParallel(
         const actualDelay = availableKeys > 6 ? batchDelay * 0.7 : batchDelay; // Сокращаем задержку если много ключей
         
         console.log(`⏱️ Пауза ${actualDelay}ms между батчами (доступно ключей: ${availableKeys})`);
-        onProgress(`Обработка следующей части договора...`);
+        onProgress(`Этап 2/7: Обработка следующей части договора...`);
         await new Promise(resolve => setTimeout(resolve, actualDelay));
       }
       
@@ -628,14 +692,134 @@ async function processChunksInParallel(
   return results;
 }
 
-// Сводный структурный анализ
+// Итоговый структурный анализ с полным контекстом всех найденных проблем
+async function performFinalStructuralAnalysis(
+  allAnalysis: any[],
+  missingRequirements: any[],
+  contradictions: any[],
+  rightsImbalance: any[],
+  perspective: 'buyer' | 'supplier',
+  onProgress: (message: string) => void
+): Promise<any> {
+  // onProgress уже вызван в основной функции
+  
+  const keyToUse = keyPool.getNextKey();
+  const genAI = new GoogleGenerativeAI(keyToUse);
+  const model = genAI.getGenerativeModel({ 
+    model: MODEL_NAME,
+    systemInstruction: `Ты - эксперт по анализу договоров поставки в России. Анализируй договоры с точки зрения ${perspective === 'buyer' ? 'Покупателя' : 'Поставщика'}.`
+  });
+
+  // Собираем самые критичные проблемы из каждой категории
+  const criticalRisks = allAnalysis
+    .filter((a: any) => a.category === 'risk' && a.comment)
+    .map((a: any) => a.comment)
+    .slice(0, 5); // Топ-5 рисков
+
+  const deemedAcceptanceIssues = allAnalysis
+    .filter((a: any) => a.category === 'deemed_acceptance' && a.comment)
+    .map((a: any) => a.comment)
+    .slice(0, 3); // Топ-3 проблемы молчания
+
+  const externalRefsIssues = allAnalysis
+    .filter((a: any) => a.category === 'external_refs' && a.comment)
+    .map((a: any) => a.comment)
+    .slice(0, 3); // Топ-3 внешние ссылки
+
+  const partialIssues = allAnalysis
+    .filter((a: any) => a.category === 'partial' && a.comment)
+    .map((a: any) => a.comment)
+    .slice(0, 3); // Топ-3 частичные проблемы
+
+  const topMissingRequirements = missingRequirements
+    .slice(0, 5)
+    .map((req: any) => req.requirement || req.comment);
+
+  const topContradictions = contradictions
+    .slice(0, 3)
+    .map((contr: any) => contr.description);
+
+  const topRightsImbalance = rightsImbalance
+    .slice(0, 3)
+    .map((imb: any) => imb.description);
+
+  const structuralPrompt = `На основе ПОЛНОГО анализа договора сформируй итоговую сводку для ${perspective === 'buyer' ? 'Покупателя' : 'Поставщика'}.
+
+КРИТИЧНЫЕ РИСКИ ИЗ АНАЛИЗА:
+${criticalRisks.length > 0 ? criticalRisks.join('\n- ') : 'Критичных рисков не обнаружено'}
+
+ПРОБЛЕМЫ МОЛЧАНИЯ/БЕЗДЕЙСТВИЯ:
+${deemedAcceptanceIssues.length > 0 ? deemedAcceptanceIssues.join('\n- ') : 'Проблем молчания не обнаружено'}
+
+ВНЕШНИЕ ССЫЛКИ (СКРЫТЫЕ РИСКИ):
+${externalRefsIssues.length > 0 ? externalRefsIssues.join('\n- ') : 'Внешних ссылок не обнаружено'}
+
+ЧАСТИЧНЫЕ ПРОБЛЕМЫ:
+${partialIssues.length > 0 ? partialIssues.join('\n- ') : 'Частичных проблем не обнаружено'}
+
+ОТСУТСТВУЮЩИЕ ТРЕБОВАНИЯ:
+${topMissingRequirements.length > 0 ? topMissingRequirements.join('\n- ') : 'Все требования выполнены'}
+
+ПРОТИВОРЕЧИЯ В ДОГОВОРЕ:
+${topContradictions.length > 0 ? topContradictions.join('\n- ') : 'Противоречий не обнаружено'}
+
+ДИСБАЛАНС ПРАВ:
+${topRightsImbalance.length > 0 ? topRightsImbalance.join('\n- ') : 'Дисбаланса прав не обнаружено'}
+
+СТАТИСТИКА:
+- Всего проанализировано пунктов: ${allAnalysis.length}
+- Найдено рисков: ${criticalRisks.length}
+- Отсутствующих требований: ${missingRequirements.length}
+- Противоречий: ${contradictions.length}
+- Дисбалансов прав: ${rightsImbalance.length}
+
+Верни JSON с итоговой сводкой, указав ТОЛЬКО САМЫЕ ВАЖНЫЕ риски и рекомендации:
+{
+  "structuralAnalysis": {
+    "overallAssessment": "Общая оценка договора с учетом всех найденных проблем (2-3 предложения)",
+    "keyRisks": ["Только 3-5 САМЫХ КРИТИЧНЫХ рисков из всего анализа"],
+    "structureComments": "Комментарий по структуре с учетом найденных проблем",
+    "legalCompliance": "Оценка соответствия российскому законодательству",
+    "recommendations": ["Только 3-5 САМЫХ ВАЖНЫХ рекомендаций для устранения критичных проблем"]
+  }
+}
+
+ВАЖНО: Фокусируйся только на самых серьезных проблемах, которые могут привести к реальным убыткам или правовым рискам.`;
+
+  const result = await model.generateContent({
+    contents: [{ role: "user", parts: [{ text: structuralPrompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.1,
+      maxOutputTokens: 8000,
+      topP: 0.95,
+      topK: 64,
+    },
+    safetySettings: [
+      {
+        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
+      },
+    ],
+  });
+
+  const rawResponse = result.response.text();
+  console.log("📊 Сырой ответ итогового структурного анализа:", rawResponse.substring(0, 300));
+  
+  // Логируем использование токенов
+  keyPool.logTokenUsage('FINAL_STRUCTURAL_ANALYSIS', structuralPrompt, rawResponse);
+  
+  return extractJsonFromResponse(rawResponse);
+}
+
+// Старая функция структурного анализа (оставляем для совместимости)
 async function performStructuralAnalysis(
   contractText: string,
   chunkResults: any[],
   perspective: 'buyer' | 'supplier',
   onProgress: (message: string) => void
 ): Promise<any> {
-  onProgress("Выполняется структурный анализ договора...");
+  // onProgress уже вызван в основной функции
   
   const keyToUse = keyPool.getNextKey();
   const genAI = new GoogleGenerativeAI(keyToUse);
@@ -709,7 +893,7 @@ async function findMissingRequirements(
   perspective: 'buyer' | 'supplier',
   onProgress: (message: string) => void
 ): Promise<any> {
-  onProgress("Поиск отсутствующих требований...");
+  // onProgress уже вызван в основной функции
   
   const keyToUse = keyPool.getNextKey();
   const genAI = new GoogleGenerativeAI(keyToUse);
@@ -1112,7 +1296,7 @@ async function findContradictions(
   perspective: 'buyer' | 'supplier',
   onProgress: (message: string) => void
 ): Promise<any> {
-  onProgress("Поиск противоречий между пунктами...");
+  // onProgress уже вызван в основной функции
   
   // Подготавливаем краткие выводы по каждому проанализированному пункту
   const analyzedSummary = allAnalysis
@@ -1231,7 +1415,7 @@ async function findRightsImbalance(
   onProgress: (message: string) => void
 ): Promise<any> {
   console.log(`🔄 НАЧАЛО функции findRightsImbalance: Анализ дисбаланса прав (всего анализов: ${allAnalysis.length})`);
-  onProgress("Анализ дисбаланса прав сторон...");
+  // onProgress уже вызван в основной функции
   
   console.log(`📊 DEBUG findRightsImbalance: Собираю пункты для анализа прав...`);
   
@@ -1517,8 +1701,8 @@ export async function analyzeContractWithGemini(
   console.log(`🚀 Начинаем многоэтапный анализ договора (${keyPool.getKeyCount()} API ключей)`);
   
   try {
-    // Этап 1: Разбивка на абзацы и создание чанков (простая разбивка по 15 абзацев)
-    onProgress("Подготовка данных и разбивка на чанки...");
+    // Этап 1: Разбивка на абзацы и создание чанков
+    onProgress("Этап 1/7: Подготовка данных и разбивка на чанки...");
     const paragraphs = splitIntoSpans(contractText);
     
     // Используем продвинутую разбивку на основе токенов с перекрытием
@@ -1533,12 +1717,10 @@ export async function analyzeContractWithGemini(
     console.log(`🔑 Доступно API ключей: ${keyPool.getAvailableKeyCount()}/${keyPool.getKeyCount()}`);
     
     // Этап 2: Параллельный анализ чанков с контролируемым параллелизмом
+    onProgress("Этап 2/7: Анализ содержимого договора...");
     const chunkResults = await processChunksInParallel(chunks, checklistText, riskText, perspective, onProgress);
     
-    // Этап 3: Структурный анализ
-    const structuralResult = await performStructuralAnalysis(contractText, chunkResults, perspective, onProgress);
-    
-    // Этап 4: Сбор найденных условий для поиска отсутствующих
+    // Этап 3: Сбор найденных условий для поиска отсутствующих
     const foundConditions: string[] = [];
     const allAnalysis: any[] = [];
     
@@ -1555,44 +1737,60 @@ export async function analyzeContractWithGemini(
       }
     });
     
-    // Этап 5: Поиск отсутствующих требований
+    // Этап 3: Поиск отсутствующих требований
+    onProgress("Этап 3/7: Поиск отсутствующих требований...");
     const missingResult = await findMissingRequirements(contractText, checklistText, foundConditions, perspective, onProgress);
-    console.log(`✅ ЭТАП 5 ЗАВЕРШЕН: Найдено ${missingResult.missingRequirements?.length || 0} отсутствующих требований`);
+    console.log(`✅ ЭТАП 3 ЗАВЕРШЕН: Найдено ${missingResult.missingRequirements?.length || 0} отсутствующих требований`);
     
-    // Этап 6: Поиск противоречий между пунктами (улучшенная AI-версия)
-    console.log(`🔄 НАЧИНАЕМ ЭТАП 6: Поиск противоречий`);
-    console.log(`📊 DEBUG ЭТАП 6: Подготовка к поиску противоречий (анализов: ${allAnalysis.length})`);
+    // Этап 4: Поиск противоречий между пунктами
+    onProgress("Этап 4/7: Поиск противоречий между пунктами...");
+    console.log(`🔄 НАЧИНАЕМ ЭТАП 4: Поиск противоречий`);
+    console.log(`📊 DEBUG ЭТАП 4: Подготовка к поиску противоречий (анализов: ${allAnalysis.length})`);
     
     let contradictionsResult;
     try {
-      console.log(`📊 DEBUG ЭТАП 6: Вызываю findContradictions...`);
+      console.log(`📊 DEBUG ЭТАП 4: Вызываю findContradictions...`);
       contradictionsResult = await findContradictions(allAnalysis, paragraphs, perspective, onProgress);
-      console.log(`📊 DEBUG ЭТАП 6: findContradictions завершена, результат:`, contradictionsResult);
-      console.log(`✅ ЭТАП 6 ЗАВЕРШЕН: Найдено ${contradictionsResult.contradictions?.length || 0} противоречий`);
+      console.log(`📊 DEBUG ЭТАП 4: findContradictions завершена, результат:`, contradictionsResult);
+      console.log(`✅ ЭТАП 4 ЗАВЕРШЕН: Найдено ${contradictionsResult.contradictions?.length || 0} противоречий`);
     } catch (error) {
-      console.error("❌ ОШИБКА В ЭТАПЕ 6:", error);
+      console.error("❌ ОШИБКА В ЭТАПЕ 4:", error);
       contradictionsResult = { contradictions: [] };
     }
     
-    // Этап 7: Анализ дисбаланса прав между сторонами
-    console.log(`🔄 ГОТОВИМСЯ К ЭТАПУ 7: Анализ дисбаланса прав (анализов: ${allAnalysis.length}, абзацев: ${paragraphs.length})`);
-    console.log(`📊 DEBUG ЭТАП 7: Подготовка к анализу дисбаланса прав`);
+    // Этап 5: Анализ дисбаланса прав между сторонами
+    onProgress("Этап 5/7: Анализ дисбаланса прав сторон...");
+    console.log(`🔄 ГОТОВИМСЯ К ЭТАПУ 5: Анализ дисбаланса прав (анализов: ${allAnalysis.length}, абзацев: ${paragraphs.length})`);
+    console.log(`📊 DEBUG ЭТАП 5: Подготовка к анализу дисбаланса прав`);
     
     let rightsImbalanceResult;
     try {
-      console.log(`📊 DEBUG ЭТАП 7: Вызываю findRightsImbalance...`);
+      console.log(`📊 DEBUG ЭТАП 5: Вызываю findRightsImbalance...`);
       rightsImbalanceResult = await findRightsImbalance(allAnalysis, paragraphs, perspective, onProgress);
-      console.log(`📊 DEBUG ЭТАП 7: findRightsImbalance завершена, результат:`, rightsImbalanceResult);
-      console.log(`✅ ЭТАП 7 ЗАВЕРШЕН: Найдено дисбалансов прав: ${rightsImbalanceResult.rightsImbalance?.length || 0}`);
+      console.log(`📊 DEBUG ЭТАП 5: findRightsImbalance завершена, результат:`, rightsImbalanceResult);
+      console.log(`✅ ЭТАП 5 ЗАВЕРШЕН: Найдено дисбалансов прав: ${rightsImbalanceResult.rightsImbalance?.length || 0}`);
     } catch (error) {
-      console.error("❌ КРИТИЧЕСКАЯ ОШИБКА В ЭТАПЕ 7:", error);
+      console.error("❌ КРИТИЧЕСКАЯ ОШИБКА В ЭТАПЕ 5:", error);
       rightsImbalanceResult = { rightsImbalance: [] };
     }
     
-    console.log(`🔄 ПЕРЕХОДИМ К ЭТАПУ 8: Финализация результатов`);
+    // Этап 6: Итоговый структурный анализ (с полным контекстом всех найденных проблем)
+    onProgress("Этап 6/7: Формирование итогового структурного анализа...");
+    console.log(`🔄 НАЧИНАЕМ ЭТАП 6: Итоговый структурный анализ`);
+    const structuralResult = await performFinalStructuralAnalysis(
+      allAnalysis, 
+      missingResult.missingRequirements || [],
+      contradictionsResult.contradictions || [],
+      rightsImbalanceResult.rightsImbalance || [],
+      perspective, 
+      onProgress
+    );
+    console.log(`✅ ЭТАП 6 ЗАВЕРШЕН: Итоговый структурный анализ`);
     
-    // Этап 8: Финализация результатов
-    onProgress("Финализация результатов...");
+    console.log(`🔄 ПЕРЕХОДИМ К ЭТАПУ 7: Финализация результатов`);
+    
+    // Этап 7: Финализация результатов
+    onProgress("Этап 7/7: Финализация результатов...");
     
     const contractParagraphs: ContractParagraph[] = paragraphs.map(paragraph => {
       const analysis = allAnalysis.find((item: any) => item.id === paragraph.id);
