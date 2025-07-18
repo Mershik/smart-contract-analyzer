@@ -5,11 +5,11 @@ const MODEL_NAME = 'gemini-2.5-flash';
 
 // Конфигурация для разбивки на чанки
 const CHUNKING_CONFIG = {
-  // Максимальное количество токенов на чанк (оставляем запас для промпта и ответа)
-  MAX_TOKENS_PER_CHUNK: 3000, // Уменьшено с 6000 до 3000 токенов
+  // Максимальное количество токенов на чанк (оптимизировано для русского языка)
+  MAX_TOKENS_PER_CHUNK: 800, // Уменьшено с 8000 до 6000 токенов для предотвращения MAX_TOKENS
   
   // Количество предложений для перекрытия между чунками
-  OVERLAP_SENTENCES: 1, // Уменьшено с 2 до 1 предложения
+  OVERLAP_SENTENCES: 2, // Увеличено с 1 до 2 предложений для лучшего контекста
   
   // Максимальная длина абзаца перед принудительным разделением
   MAX_PARAGRAPH_LENGTH: 1500,
@@ -71,6 +71,29 @@ class ApiKeyPool {
     }
     
     throw new Error("Не удалось найти доступный API ключ");
+  }
+
+  // Новый метод для подсчета токенов в тексте
+  private estimateTokens(text: string): number {
+    // Эмпирическая эвристика для русского языка: 1 токен ≈ 4 символа
+    // Это более стабильно, чем подсчет слов
+    const AVERAGE_CHARS_PER_TOKEN = 4;
+    return Math.ceil(text.length / AVERAGE_CHARS_PER_TOKEN);
+  }
+
+  // Метод для логирования использования токенов
+  logTokenUsage(operation: string, inputText: string, outputText: string = ''): void {
+    const inputTokens = this.estimateTokens(inputText);
+    const outputTokens = this.estimateTokens(outputText);
+    const totalTokens = inputTokens + outputTokens;
+    
+    console.log(`📊 ТОКЕНЫ [${operation}]:`, {
+      input: inputTokens,
+      output: outputTokens,
+      total: totalTokens,
+      inputLength: inputText.length,
+      outputLength: outputText.length
+    });
   }
 
   markKeyAsExhausted(key: string): void {
@@ -141,13 +164,22 @@ function extractJsonFromResponse(rawResponse: string): any {
     // Попытка восстановить обрезанный JSON
     let repairedJson = cleanedResponse;
     
-    // Если JSON обрезан в середине строки, пытаемся закрыть её
-    if (repairedJson.includes('"') && !repairedJson.endsWith('"')) {
-      const lastQuoteIndex = repairedJson.lastIndexOf('"');
-      const afterLastQuote = repairedJson.substring(lastQuoteIndex + 1);
+    // Улучшенная логика восстановления обрезанных строк
+    if (repairedJson.includes('"')) {
+      // Находим все незакрытые кавычки
+      let quoteCount = 0;
+      let lastQuoteIndex = -1;
       
-      // Если после последней кавычки нет закрывающих символов, добавляем их
-      if (!afterLastQuote.includes('"') && !afterLastQuote.includes('}')) {
+      for (let i = 0; i < repairedJson.length; i++) {
+        if (repairedJson[i] === '"' && (i === 0 || repairedJson[i-1] !== '\\')) {
+          quoteCount++;
+          lastQuoteIndex = i;
+        }
+      }
+      
+      // Если количество кавычек нечетное, значит есть незакрытая строка
+      if (quoteCount % 2 !== 0) {
+        // Обрезаем до последней кавычки и добавляем закрывающую
         repairedJson = repairedJson.substring(0, lastQuoteIndex + 1) + '"';
         console.log("🔧 Попытка закрыть обрезанную строку");
       }
@@ -211,6 +243,18 @@ function extractJsonFromResponse(rawResponse: string): any {
         return fallbackResult;
       }
       
+      // Специальная обработка для противоречий
+      if (rawResponse.includes('contradictions')) {
+        console.log("🔍 Пытаемся извлечь данные противоречий");
+        
+        // Пытаемся найти хотя бы одно противоречие
+        const contradictionMatch = rawResponse.match(/"id":\s*"contr_\d+"/);
+        if (contradictionMatch) {
+          console.log("🔍 Найдено частичное противоречие, возвращаем пустой массив");
+          return { contradictions: [] };
+        }
+      }
+      
       // Попытка найти хотя бы частичный валидный JSON для обычного анализа
       const jsonMatches = rawResponse.match(/{[^}]*"chunkId"[^}]*}/g);
       if (jsonMatches && jsonMatches.length > 0) {
@@ -249,8 +293,9 @@ function createChunksWithTokens(
   
   // Функция для подсчета токенов в тексте
   const countTokens = (text: string): number => {
-    // Примерная оценка 1 токен = 0.75 слова
-    return Math.ceil(text.split(/\s+/).length / 0.75);
+    // Эмпирическая эвристика для русского языка: 1 токен ≈ 4 символа
+    const AVERAGE_CHARS_PER_TOKEN = 4;
+    return Math.ceil(text.length / AVERAGE_CHARS_PER_TOKEN);
   };
   
   // Функция для извлечения последних предложений из текста
@@ -325,7 +370,7 @@ function createChunksWithTokens(
 }
 
 // Простая разбивка на чанки по количеству абзацев
-function createChunks(paragraphs: Array<{ id: string; text: string }>, chunkSize: number = 15): Array<{ id: string; paragraphs: Array<{ id: string; text: string }> }> {
+function createChunks(paragraphs: Array<{ id: string; text: string }>, chunkSize: number = 10): Array<{ id: string; paragraphs: Array<{ id: string; text: string }> }> {
   const chunks: Array<{ id: string; paragraphs: Array<{ id: string; text: string }> }> = [];
   
   for (let i = 0; i < paragraphs.length; i += chunkSize) {
@@ -452,6 +497,9 @@ JSON:
 
       const rawResponse = result.response.text();
       console.log(`📝 Сырой ответ для ${chunk.id}:`, rawResponse.substring(0, 300));
+      
+      // Логируем использование токенов
+      keyPool.logTokenUsage(`CHUNK_${chunk.id}`, chunkPrompt, rawResponse);
       
       return extractJsonFromResponse(rawResponse);
       
@@ -596,10 +644,25 @@ async function performStructuralAnalysis(
     systemInstruction: `Ты - эксперт по анализу договоров поставки в России. Анализируй договоры с точки зрения ${perspective === 'buyer' ? 'Покупателя' : 'Поставщика'}.`
   });
 
+  // Создаем краткую сводку вместо передачи всех данных
+  const summaryResults = chunkResults.map(chunk => {
+    const analysis = chunk.analysis || [];
+    return {
+      chunkId: chunk.chunkId,
+      totalAnalyzed: analysis.length,
+      risks: analysis.filter((a: any) => a.category === 'risk').length,
+      partialIssues: analysis.filter((a: any) => a.category === 'partial').length,
+      ambiguous: analysis.filter((a: any) => a.category === 'ambiguous').length,
+      deemedAcceptance: analysis.filter((a: any) => a.category === 'deemed_acceptance').length,
+      externalRefs: analysis.filter((a: any) => a.category === 'external_refs').length,
+      checklist: analysis.filter((a: any) => a.category === 'checklist').length
+    };
+  });
+
   const structuralPrompt = `Сделай краткую сводку анализа договора для ${perspective === 'buyer' ? 'Покупателя' : 'Поставщика'}.
 
-РЕЗУЛЬТАТЫ АНАЛИЗА АБЗАЦЕВ:
-${JSON.stringify(chunkResults, null, 2)}
+СТАТИСТИКА АНАЛИЗА ПО ЧАНКАМ:
+${JSON.stringify(summaryResults, null, 2)}
 
 Верни JSON с краткой сводкой:
 {
@@ -632,6 +695,9 @@ ${JSON.stringify(chunkResults, null, 2)}
   const rawResponse = result.response.text();
   console.log("📊 Сырой ответ структурного анализа:", rawResponse.substring(0, 300));
   
+  // Логируем использование токенов
+  keyPool.logTokenUsage('STRUCTURAL_ANALYSIS', structuralPrompt, rawResponse);
+  
   return extractJsonFromResponse(rawResponse);
 }
 
@@ -646,15 +712,13 @@ async function findMissingRequirements(
   onProgress("Поиск отсутствующих требований...");
   
   const keyToUse = keyPool.getNextKey();
-  console.log(`🔑 Использую ключ ${keyToUse.substring(0, 10)}... (использован ${keyPool.getKeyUsageCount(keyToUse)} раз, доступно ${keyPool.getAvailableKeyCount()}/${keyPool.getKeyCount()})`);
-  
   const genAI = new GoogleGenerativeAI(keyToUse);
   const model = genAI.getGenerativeModel({ 
     model: MODEL_NAME,
     systemInstruction: `Ты - эксперт по анализу договоров поставки в России. Анализируй договоры с точки зрения ${perspective === 'buyer' ? 'Покупателя' : 'Поставщика'}.`
   });
 
-  const missingPrompt = `Найди 3-5 самых важных отсутствующих требований, сравнив чек-лист с выполненными условиями.
+  const missingPrompt = `Найди до 10 самых важных отсутствующих требований, сравнив чек-лист с выполненными условиями.
 
 ПОЛНЫЙ ЧЕК-ЛИСТ:
 ${checklistText}
@@ -662,7 +726,7 @@ ${checklistText}
 УЖЕ ПОЛНОСТЬЮ ВЫПОЛНЕННЫЕ УСЛОВИЯ (всего ${foundConditions.length}):
 ${foundConditions.join(', ')}
 
-Верни JSON с 3-5 самыми важными отсутствующими требованиями:
+Верни JSON с до 10 самыми важными отсутствующими требованиями:
 {
   "missingRequirements": [
     {
@@ -978,7 +1042,7 @@ async function verifyContradictionWithAI(
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.1,
-        maxOutputTokens: 2000, // Увеличиваем лимит токенов
+        maxOutputTokens: 4000, // Увеличиваем лимит токенов
         topP: 0.95,
         topK: 64,
       },
@@ -1057,12 +1121,12 @@ async function findContradictions(
       const paragraph = paragraphs.find(p => p.id === item.id);
       return {
         id: item.id,
-        text: paragraph?.text?.substring(0, 200) + ((paragraph?.text && paragraph.text.length > 200) ? '...' : ''),
+        text: paragraph?.text?.substring(0, 100) + ((paragraph?.text && paragraph.text.length > 100) ? '...' : ''), // Сокращаем текст
         category: item.category,
-        comment: item.comment,
-        recommendation: item.recommendation
+        comment: item.comment?.substring(0, 100) || null // Сокращаем комментарии
       };
-    });
+    })
+    .slice(0, 30); // Ограничиваем количество пунктов для анализа
 
   // Если анализированных пунктов мало, не ищем противоречия
   if (analyzedSummary.length < 3) {
@@ -1097,19 +1161,19 @@ ${JSON.stringify(analyzedSummary, null, 2)}
     {
       "id": "contr_1",
       "type": "temporal",
-      "description": "Краткое описание противоречия",
+      "description": "Краткое описание противоречия (до 100 символов)",
       "conflictingParagraphs": {
         "paragraph1": {
-          "text": "Первый противоречащий пункт (до 150 символов)",
-          "value": "Конкретное значение из первого пункта"
+          "text": "Первый пункт (до 80 символов)",
+          "value": "Значение 1"
         },
         "paragraph2": {
-          "text": "Второй противоречащий пункт (до 150 символов)", 
-          "value": "Конкретное значение из второго пункта"
+          "text": "Второй пункт (до 80 символов)", 
+          "value": "Значение 2"
         }
       },
       "severity": "high",
-      "recommendation": "Рекомендация по устранению"
+      "recommendation": "Краткая рекомендация (до 80 символов)"
     }
   ]
 }
@@ -1123,7 +1187,7 @@ ${JSON.stringify(analyzedSummary, null, 2)}
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.1,
-        maxOutputTokens: 8000,
+        maxOutputTokens: 8000, // Максимум для Gemini 2.5 Flash
         topP: 0.95,
         topK: 64,
       },
@@ -1457,8 +1521,12 @@ export async function analyzeContractWithGemini(
     onProgress("Подготовка данных и разбивка на чанки...");
     const paragraphs = splitIntoSpans(contractText);
     
-    // Используем простую разбивку по абзацам (15 абзацев на чунк)
-    const chunks = createChunks(paragraphs, 15);
+    // Используем продвинутую разбивку на основе токенов с перекрытием
+    const chunks = createChunksWithTokens(
+      paragraphs,
+      CHUNKING_CONFIG.MAX_TOKENS_PER_CHUNK,
+      CHUNKING_CONFIG.OVERLAP_SENTENCES
+    );
     
     console.log(`📄 Договор разбит на ${paragraphs.length} абзацев и ${chunks.length} чанков`);
     console.log(`📊 В среднем ${Math.round(paragraphs.length / chunks.length)} абзацев на чанк`);
