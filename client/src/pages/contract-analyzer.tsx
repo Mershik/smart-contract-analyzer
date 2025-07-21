@@ -246,7 +246,6 @@ export default function ContractAnalyzer() {
     const [showOther, setShowOther] = useState(true);
     const [showContradictions, setShowContradictions] = useState(true);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [isFiltersVisible, setIsFiltersVisible] = useState(false);
 
     const { analyzeContract, isLoading, error, progress } = useGeminiAnalysis();
     
@@ -273,19 +272,6 @@ export default function ContractAnalyzer() {
         }
     }, [structuralAnalysis, isAnalyzing]);
 
-    useEffect(() => {
-        const analysisSection = document.getElementById("analysis-results");
-        if (!analysisSection) {
-            setIsFiltersVisible(false);
-            return;
-        }
-        const observer = new window.IntersectionObserver(
-            ([entry]) => setIsFiltersVisible(entry.isIntersecting),
-            { threshold: 0.1 }
-        );
-        observer.observe(analysisSection);
-        return () => observer.disconnect();
-    }, [contractParagraphs.length]);
 
     const handlePerspectiveChange = (newPerspective: 'buyer' | 'supplier') => {
         setPerspective(newPerspective);
@@ -552,6 +538,19 @@ export default function ContractAnalyzer() {
                                             exportToDocx={() => exportToDocx(contractParagraphs)}
                                             onUpdateComment={handleUpdateComment}
                                             onSubmitFeedback={handleSubmitFeedback}
+                                            showContradictions={showContradictions}
+                                            onToggleCompliance={setShowCompliance}
+                                            onTogglePartial={setShowPartial}
+                                            onToggleRisks={setShowRisks}
+                                            onToggleMissing={setShowMissing}
+                                            onToggleOther={setShowOther}
+                                            onToggleContradictions={setShowContradictions}
+                                            complianceCount={complianceCount}
+                                            partialCount={partialCount}
+                                            riskCount={riskCount}
+                                            missingCount={missingCountTotal}
+                                            otherCount={otherCount}
+                                            contradictionsCount={contradictions.length}
                                         />
                                     </div>
                                 )}
@@ -582,37 +581,39 @@ export default function ContractAnalyzer() {
                             </div>
 
                             {/* Table of Contents and Filters - Right Sidebar */}
-                            <div className="lg:col-span-1 flex flex-col gap-6">
-                                <TableOfContents
-                                    hasStructuralAnalysis={!!structuralAnalysis}
-                                    hasResults={contractParagraphs.length > 0}
-                                    hasContradictions={contradictions.length > 0}
-                                    hasRightsImbalance={rightsImbalance.length > 0}
-                                    hasMissingRequirements={missingRequirements.length > 0}
-                                />
-                                {/* Фильтр — обычный блочный элемент, появляется только при просмотре раздела 'Анализ по абзацам' */}
-                                {isFiltersVisible && (
-                                    <FloatingFilters
-                                        showCompliance={showCompliance}
-                                        showPartial={showPartial}
-                                        showRisks={showRisks}
-                                        showMissing={showMissing}
-                                        showOther={showOther}
-                                        showContradictions={showContradictions}
-                                        onToggleCompliance={setShowCompliance}
-                                        onTogglePartial={setShowPartial}
-                                        onToggleRisks={setShowRisks}
-                                        onToggleMissing={setShowMissing}
-                                        onToggleOther={setShowOther}
-                                        onToggleContradictions={setShowContradictions}
-                                        complianceCount={complianceCount}
-                                        partialCount={partialCount}
-                                        riskCount={riskCount}
-                                        missingCount={missingCountTotal}
-                                        otherCount={otherCount}
-                                        contradictionsCount={contradictions.length}
+                            <div className="lg:col-span-1">
+                                <div className="sticky top-24 space-y-6">
+                                    <TableOfContents
+                                        hasStructuralAnalysis={!!structuralAnalysis}
+                                        hasResults={contractParagraphs.length > 0}
+                                        hasContradictions={contradictions.length > 0}
+                                        hasRightsImbalance={rightsImbalance.length > 0}
+                                        hasMissingRequirements={missingRequirements.length > 0}
                                     />
-                                )}
+                                    {/* Фильтр — отдельный блок под оглавлением */}
+                                    {contractParagraphs.length > 0 && (
+                                        <FloatingFilters
+                                            showCompliance={showCompliance}
+                                            showPartial={showPartial}
+                                            showRisks={showRisks}
+                                            showMissing={showMissing}
+                                            showOther={showOther}
+                                            showContradictions={showContradictions}
+                                            onToggleCompliance={setShowCompliance}
+                                            onTogglePartial={setShowPartial}
+                                            onToggleRisks={setShowRisks}
+                                            onToggleMissing={setShowMissing}
+                                            onToggleOther={setShowOther}
+                                            onToggleContradictions={setShowContradictions}
+                                            complianceCount={complianceCount}
+                                            partialCount={partialCount}
+                                            riskCount={riskCount}
+                                            missingCount={missingCountTotal}
+                                            otherCount={otherCount}
+                                            contradictionsCount={contradictions.length}
+                                        />
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}

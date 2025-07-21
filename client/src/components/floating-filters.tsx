@@ -44,7 +44,7 @@ export function FloatingFilters({
   contradictionsCount,
 }: FloatingFiltersProps) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+    <div className="bg-white rounded-lg border border-gray-200 p-4">
       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
         <Filter className="mr-2 text-blue-600" size={20} />
         Фильтры результатов
@@ -107,6 +107,24 @@ export function FloatingFilters({
           </span>
         </div>
 
+        {/* Неоднозначные условия */}
+        <div className="flex items-center justify-between">
+          <label htmlFor="floating-other" className="flex items-center space-x-2 cursor-pointer">
+            <Checkbox 
+              id="floating-other"
+              checked={showOther}
+              onCheckedChange={onToggleOther}
+            />
+            <div className="flex items-center space-x-2">
+              <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
+              <span className="text-sm font-medium text-gray-700">Неоднозначные</span>
+            </div>
+          </label>
+          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+            {otherCount}
+          </span>
+        </div>
+
         {/* Отсутствующие требования */}
         <div className="flex items-center justify-between">
           <label htmlFor="floating-missing" className="flex items-center space-x-2 cursor-pointer">
@@ -122,24 +140,6 @@ export function FloatingFilters({
           </label>
           <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
             {missingCount}
-          </span>
-        </div>
-
-        {/* Другие условия */}
-        <div className="flex items-center justify-between">
-          <label htmlFor="floating-other" className="flex items-center space-x-2 cursor-pointer">
-            <Checkbox 
-              id="floating-other"
-              checked={showOther}
-              onCheckedChange={onToggleOther}
-            />
-            <div className="flex items-center space-x-2">
-              <span className="w-2 h-2 bg-gray-500 rounded-full"></span>
-              <span className="text-sm font-medium text-gray-700">Другое</span>
-            </div>
-          </label>
-          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-            {otherCount}
           </span>
         </div>
 
@@ -160,6 +160,7 @@ export function FloatingFilters({
             {contradictionsCount}
           </span>
         </div>
+
       </div>
     </div>
   );

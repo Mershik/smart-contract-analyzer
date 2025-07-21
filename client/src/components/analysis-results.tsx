@@ -16,20 +16,48 @@ interface AnalysisResultsProps {
   exportToDocx: () => void;
   onUpdateComment?: (_id: string, _newComment: string) => void;
   onSubmitFeedback?: (_feedback: any) => void;
+  result?: any; // Добавляем полный результат анализа
+  showContradictions: boolean;
+  onToggleCompliance: (_checked: boolean) => void;
+  onTogglePartial?: (_checked: boolean) => void;
+  onToggleRisks: (_checked: boolean) => void;
+  onToggleMissing: (_checked: boolean) => void;
+  onToggleOther: (_checked: boolean) => void;
+  onToggleContradictions: (_checked: boolean) => void;
+  complianceCount: number;
+  partialCount?: number;
+  riskCount: number;
+  missingCount: number;
+  otherCount: number;
+  contradictionsCount: number;
 }
 
 export function AnalysisResults({ 
   contractParagraphs, 
   missingRequirements,
-  _ambiguousConditions,
+  ambiguousConditions,
   showCompliance, 
   showRisks, 
   showOther, 
   showMissing, 
   showPartial, 
   exportToDocx,
-  _onUpdateComment,
-  _onSubmitFeedback
+  onUpdateComment,
+  onSubmitFeedback,
+  result,
+  showContradictions,
+  onToggleCompliance,
+  onTogglePartial,
+  onToggleRisks,
+  onToggleMissing,
+  onToggleOther,
+  onToggleContradictions,
+  complianceCount,
+  partialCount,
+  riskCount,
+  missingCount,
+  otherCount,
+  contradictionsCount
 }: AnalysisResultsProps) {
   
   const handleExport = () => {
@@ -49,6 +77,7 @@ export function AnalysisResults({
           Экспорт в DOCX
           </Button>
       </div>
+
 
       {/* Информационная панель */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

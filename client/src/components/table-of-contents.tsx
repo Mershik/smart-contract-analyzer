@@ -120,7 +120,7 @@ export function TableOfContents({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sticky top-24">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
         <Search className="mr-2 text-orange-600" size={20} />
         Оглавление

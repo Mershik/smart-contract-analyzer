@@ -137,7 +137,7 @@ export function SidebarFilters({
                 onCheckedChange={onToggleOther}
               />
               <div className="flex items-center space-x-2">
-                <span className="w-3 h-3 bg-gray-500 rounded-full"></span>
+                <span className="w-3 h-3 bg-indigo-500 rounded-full"></span>
                 <span className="text-sm font-medium text-gray-700">Неоднозначные</span>
               </div>
             </label>

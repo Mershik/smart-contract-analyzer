@@ -27,6 +27,8 @@ export function ExpandableParagraph({
     onToggle?.(paragraph.id);
   };
 
+  const hasDetails = paragraph.comment || paragraph.recommendation || paragraph.improvedClause || paragraph.legalRisk;
+
   const getCategoryColor = (category?: string) => {
     // Проверяем, включен ли фильтр для данной категории
     const isFilterActive = () => {
@@ -66,8 +68,6 @@ export function ExpandableParagraph({
         return 'bg-gray-50 border-l-4 border-l-gray-300 hover:bg-gray-100';
     }
   };
-
-  const hasDetails = paragraph.comment || paragraph.recommendation || paragraph.improvedClause || paragraph.legalRisk;
 
   return (
     <div className={`border border-gray-200 rounded-lg mb-2 transition-all duration-200 ${getCategoryColor(paragraph.category)}`}>
