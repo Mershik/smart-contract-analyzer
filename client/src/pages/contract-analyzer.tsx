@@ -555,29 +555,22 @@ export default function ContractAnalyzer() {
                                     </div>
                                 )}
 
-                                {/* Отсутствующие требования — отдельный id для якоря */}
-                                {missingRequirements.length > 0 && (
-                                    <div id="missing-requirements" />
-                                )}
-
+                                {/* Отсутствующие требования — якорь в компоненте AnalysisResults */}
+                                
                                 {/* Contradictions Results */}
-                                {contractParagraphs.length > 0 && (
-                                    <div id="contradictions-results">
-                                        <ContradictionsResults
-                                            contradictions={contradictions}
-                                            showContradictions={showContradictions}
-                                        />
-                                    </div>
-                                )}
+                                <div id="contradictions-results">
+                                    <ContradictionsResults
+                                        contradictions={contradictions}
+                                        showContradictions={showContradictions}
+                                    />
+                                </div>
 
                                 {/* Rights Imbalance Results */}
-                                {contractParagraphs.length > 0 && (
-                                    <div id="rights-imbalance-results">
-                                        <RightsImbalanceResults
-                                            rightsImbalance={rightsImbalance}
-                                        />
-                                    </div>
-                                )}
+                                <div id="rights-imbalance-results">
+                                    <RightsImbalanceResults
+                                        rightsImbalance={rightsImbalance}
+                                    />
+                                </div>
                             </div>
 
                             {/* Table of Contents and Filters - Right Sidebar */}

@@ -27,21 +27,15 @@ export function FloatingFilters({
   showCompliance,
   showPartial,
   showRisks,
-  showMissing,
   showOther,
-  showContradictions,
   onToggleCompliance,
   onTogglePartial,
   onToggleRisks,
-  onToggleMissing,
   onToggleOther,
-  onToggleContradictions,
   complianceCount,
   partialCount,
   riskCount,
-  missingCount,
-  otherCount,
-  contradictionsCount,
+  otherCount
 }: FloatingFiltersProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -125,41 +119,6 @@ export function FloatingFilters({
           </span>
         </div>
 
-        {/* Отсутствующие требования */}
-        <div className="flex items-center justify-between">
-          <label htmlFor="floating-missing" className="flex items-center space-x-2 cursor-pointer">
-            <Checkbox 
-              id="floating-missing"
-              checked={showMissing}
-              onCheckedChange={onToggleMissing}
-            />
-            <div className="flex items-center space-x-2">
-              <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
-              <span className="text-sm font-medium text-gray-700">Отсутствует</span>
-            </div>
-          </label>
-          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-            {missingCount}
-          </span>
-        </div>
-
-        {/* Противоречия */}
-        <div className="flex items-center justify-between">
-          <label htmlFor="floating-contradictions" className="flex items-center space-x-2 cursor-pointer">
-            <Checkbox 
-              id="floating-contradictions"
-              checked={showContradictions}
-              onCheckedChange={onToggleContradictions}
-            />
-            <div className="flex items-center space-x-2">
-              <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-              <span className="text-sm font-medium text-gray-700">Противоречия</span>
-            </div>
-          </label>
-          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-            {contradictionsCount}
-          </span>
-        </div>
 
       </div>
     </div>

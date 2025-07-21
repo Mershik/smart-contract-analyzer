@@ -7,8 +7,19 @@ interface ContradictionsResultsProps {
 }
 
 export function ContradictionsResults({ contradictions, showContradictions }: ContradictionsResultsProps) {
-  if (!showContradictions || contradictions.length === 0) {
-    return null;
+  // Всегда рендерим компонент для корректной навигации
+  if (!showContradictions) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow border">
+        <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+          <AlertTriangle className="w-5 h-5 mr-2 text-gray-400" />
+          Выявленные противоречия (скрыто)
+        </h4>
+        <div className="text-center py-8 text-gray-500">
+          <p>Фильтр противоречий отключен</p>
+        </div>
+      </div>
+    );
   }
 
   const getTypeIcon = (type: string) => {

@@ -110,24 +110,6 @@ export function SidebarFilters({
             </span>
           </div>
 
-          {/* Отсутствующие */}
-          <div className="flex items-center justify-between">
-            <label htmlFor="missing" className="flex items-center space-x-3 cursor-pointer">
-              <Checkbox 
-                id="missing"
-                checked={showMissing}
-                onCheckedChange={onToggleMissing}
-              />
-              <div className="flex items-center space-x-2">
-                <span className="w-3 h-3 bg-orange-500 rounded-full"></span>
-                <span className="text-sm font-medium text-gray-700">Отсутствует</span>
-              </div>
-            </label>
-            <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              {missingCount}
-            </span>
-          </div>
-
           {/* Неоднозначные и прочие */}
           <div className="flex items-center justify-between">
             <label htmlFor="other" className="flex items-center space-x-3 cursor-pointer">
@@ -143,24 +125,6 @@ export function SidebarFilters({
             </label>
             <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
               {otherCount}
-            </span>
-          </div>
-
-          {/* Противоречия */}
-          <div className="flex items-center justify-between">
-            <label htmlFor="contradictions" className="flex items-center space-x-3 cursor-pointer">
-              <Checkbox 
-                id="contradictions"
-                checked={showContradictions}
-                onCheckedChange={onToggleContradictions}
-              />
-              <div className="flex items-center space-x-2">
-                <span className="w-3 h-3 bg-purple-500 rounded-full"></span>
-                <span className="text-sm font-medium text-gray-700">Противоречия</span>
-              </div>
-            </label>
-            <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              {contradictionsCount}
             </span>
           </div>
         </div>
