@@ -2065,125 +2065,78 @@ function analyzeRightsImbalanceProgrammatically(
   allParagraphs: Array<{ id: string; text: string }>
 ): any {
   console.log(`🔍 Шаг 5.2: Взвешенный программный анализ дисбаланса...`);
-  const rightsImbalance: any[] = [];
   
-  // Веса для разных типов прав
-  const weights = {
-    modification: 10, // Самое "сильное" право
-    liability: 8,
-    termination: 7,
-    control: 5,
-    procedural: 2 // Самое "слабое" право
+  const rightsImbalance: any[] = [];
+  const buyerClauses = classifiedClauses.filter(c => c.party === 'buyer');
+  const supplierClauses = classifiedClauses.filter(c => c.party === 'supplier');
+  const bothClauses = classifiedClauses.filter(c => c.party === 'both');
+
+  const typeNames = {
+    termination: "расторжения договора",
+    modification: "изменения условий",
+    liability: "финансовой ответственности",
+    control: "контроля и приемки",
+    procedural: "процедурных прав"
   };
 
-  let buyerScore = 0;
-  let supplierScore = 0;
+  // --- 1. АНАЛИЗ ОТВЕТСТВЕННОСТИ (LIABILITY) ---
+  const buyerLiability = buyerClauses.filter(c => c.type === 'liability');
+  const supplierLiability = supplierClauses.filter(c => c.type === 'liability');
+  
+  if (supplierLiability.length > 0 || buyerLiability.length > 0) {
+    const buyerPenalty = extractFinancialValue(buyerLiability.map(c => allParagraphs.find(p => p.id === c.id)?.text || ''));
+    const supplierPenalty = extractFinancialValue(supplierLiability.map(c => allParagraphs.find(p => p.id === c.id)?.text || ''));
+    
+    let isImbalanced = false;
+    let description = `Анализ финансовой ответственности. Прав Поставщика: ${supplierLiability.length}, прав Покупателя: ${buyerLiability.length}.`;
+    let severity = 'low';
 
-  // 1. Считаем общий "вес" прав для каждой стороны
-  classifiedClauses.forEach(clause => {
-    const weight = weights[clause.type as keyof typeof weights] || 1;
-    if (clause.party === 'buyer') {
-      buyerScore += weight;
-    } else if (clause.party === 'supplier') {
-      supplierScore += weight;
+    if (supplierPenalty > buyerPenalty * 2 && buyerPenalty >= 0) {
+      isImbalanced = true;
+      description = `Обнаружен критический дисбаланс ответственности: санкции, которые может применить Поставщик (например, пеня ${supplierPenalty}%), значительно выше санкций, доступных Покупателю (например, неустойка ${buyerPenalty}%).`;
+      severity = 'high';
+    } else if (supplierLiability.length > buyerLiability.length + 1) {
+        isImbalanced = true;
+        description = `Обнаружен количественный дисбаланс в правах на взыскание: у Поставщика (${supplierLiability.length}) больше инструментов для наложения санкций, чем у Покупателя (${buyerLiability.length}).`
+        severity = 'medium';
     }
-  });
 
-  console.log(`📊 Взвешенные счета: покупатель ${buyerScore}, поставщик ${supplierScore}`);
-
-  // 2. Анализируем общий баланс по "весу"
-  const totalScore = buyerScore + supplierScore;
-  if (totalScore > 0) {
-    const buyerPercentage = Math.round((buyerScore / totalScore) * 100);
-    const supplierPercentage = Math.round((supplierScore / totalScore) * 100);
-    const scoreDifference = Math.abs(buyerScore - supplierScore);
-    const maxScore = Math.max(buyerScore, supplierScore);
-    const imbalancePercentage = maxScore > 0 ? Math.round((scoreDifference / maxScore) * 100) : 0;
-
-    if (imbalancePercentage > 30) { // Снижаем порог для взвешенного анализа
-      const favoredParty = buyerScore > supplierScore ? "покупателя" : "поставщика";
-      const severity = imbalancePercentage > 60 ? "high" : "medium";
-      
+    if (isImbalanced) {
       rightsImbalance.push({
-        id: "weighted_imbalance",
-        type: "weighted_analysis",
-        description: `Взвешенный дисбаланс прав в пользу ${favoredParty}. Взвешенный счет: Покупатель ${buyerScore} (${buyerPercentage}%), Поставщик ${supplierScore} (${supplierPercentage}%).`,
-        buyerRights: buyerScore,
-        supplierRights: supplierScore,
-        severity: severity,
-        recommendation: `Рекомендуется пересмотреть распределение прав, особенно в категориях с высоким весом.`
+        id: `imbalance_liability`, type: 'liability', description, severity,
+        buyerRights: buyerLiability.length, supplierRights: supplierLiability.length,
+        recommendation: `Рекомендуется пересмотреть размеры и основания для неустоек, чтобы обеспечить соразмерность финансовой ответственности сторон.`,
+        buyerRightsClauses: buyerLiability.map(c => allParagraphs.find(p => p.id === c.id)),
+        supplierRightsClauses: supplierLiability.map(c => allParagraphs.find(p => p.id === c.id)),
       });
     }
   }
 
-  // Функция для получения текста пункта
-  const getParagraphText = (id: string): string => {
-    if (allParagraphs) {
-      const paragraph = allParagraphs.find(p => p.id === id);
-      return paragraph ? paragraph.text : `Пункт ${id}`;
-    }
-    return `Пункт ${id}`;
-  };
-
-  // 3. Анализируем дисбаланс ВНУТРИ каждой категории
-  for (const type in weights) {
-    const buyerRightsInCategory = classifiedClauses.filter(c => c.party === 'buyer' && c.type === type);
-    const supplierRightsInCategory = classifiedClauses.filter(c => c.party === 'supplier' && c.type === type);
-
-    if (buyerRightsInCategory.length !== supplierRightsInCategory.length) {
-      // Если есть явный перекос в какой-то из категорий, создаем отдельный пункт отчета
-      if (Math.abs(buyerRightsInCategory.length - supplierRightsInCategory.length) > 0) { // Любой перекос
-        const typeNames = {
-          termination: "расторжения договора",
-          modification: "изменения условий",
-          liability: "взыскания штрафов/неустоек",
-          control: "контроля и проверки",
-          procedural: "процедурных прав"
-        };
-
-        // Формируем детали по пунктам
-        const buyerRightsClauses = buyerRightsInCategory
-          .filter(clause => {
-            const text = getParagraphText(clause.id);
-            // Исключаем технические пункты и те, где не найден текст
-            return !clause.id.startsWith('overlap_') && text && !text.startsWith('Пункт ');
-          })
-          .map(clause => ({
-            id: clause.id,
-            text: getParagraphText(clause.id),
-            summary: getParagraphText(clause.id).substring(0, 100) + (getParagraphText(clause.id).length > 100 ? '...' : '')
-          }));
-
-        const supplierRightsClauses = supplierRightsInCategory
-          .filter(clause => {
-            const text = getParagraphText(clause.id);
-            return !clause.id.startsWith('overlap_') && text && !text.startsWith('Пункт ');
-          })
-          .map(clause => ({
-            id: clause.id,
-            text: getParagraphText(clause.id),
-            summary: getParagraphText(clause.id).substring(0, 100) + (getParagraphText(clause.id).length > 100 ? '...' : '')
-          }));
-        
-        rightsImbalance.push({
-          id: `imbalance_${type}`,
-          type: type,
-          description: `Обнаружен дисбаланс в сфере '${typeNames[type as keyof typeof typeNames] || type}'. Прав Покупателя: ${buyerRightsInCategory.length}, прав Поставщика: ${supplierRightsInCategory.length}.`,
-          buyerRights: buyerRightsInCategory.length,
-          supplierRights: supplierRightsInCategory.length,
-          severity: 'medium',
-          recommendation: `Рекомендуется пересмотреть права сторон в области '${typeNames[type as keyof typeof typeNames] || type}'.`,
-          buyerRightsClauses: buyerRightsClauses,
-          supplierRightsClauses: supplierRightsClauses
-        });
+  // --- 2. АНАЛИЗ ДРУГИХ КАТЕГОРИЙ (Modification, Termination, Control) ---
+  const typesToAnalyze: Array<keyof typeof typeNames> = ['modification', 'termination', 'control'];
+  
+  typesToAnalyze.forEach(type => {
+      const buyerRights = buyerClauses.filter(c => c.type === type);
+      const supplierRights = supplierClauses.filter(c => c.type === type);
+      
+      // Ищем дисбаланс только если у одной стороны есть права, а у другой нет, или разница существенна
+      if (Math.abs(buyerRights.length - supplierRights.length) > 0 && (buyerRights.length === 0 || supplierRights.length === 0)) {
+           const favoredParty = buyerRights.length > supplierRights.length ? "Покупателя" : "Поставщика";
+           const favoredPartyRus = favoredParty === "Покупателя" ? "Покупатель" : "Поставщик";
+           
+           rightsImbalance.push({
+              id: `imbalance_${type}`, type: type,
+              description: `Обнаружен дисбаланс в сфере ${typeNames[type]}: ${favoredPartyRus} имеет ${Math.max(buyerRights.length, supplierRights.length)} прав(о) в этой категории, в то время как у другой стороны их нет.`,
+              severity: type === 'modification' ? 'high' : 'medium',
+              buyerRights: buyerRights.length, supplierRights: supplierRights.length,
+              recommendation: `Рекомендуется предоставить второй стороне симметричные права в области ${typeNames[type]} или ограничить существующие.`,
+              buyerRightsClauses: buyerRights.map(c => allParagraphs.find(p => p.id === c.id)),
+              supplierRightsClauses: supplierRights.map(c => allParagraphs.find(p => p.id === c.id)),
+           });
       }
-    }
-  }
-
-  const overallConclusion = `Взвешенный анализ завершен. Общий взвешенный счет Покупателя: ${buyerScore}, Поставщика: ${supplierScore}. Найдено дисбалансов: ${rightsImbalance.length}.`;
+  });
   
-  console.log(`✅ Взвешенный анализ завершен: найдено ${rightsImbalance.length} дисбалансов`);
-  
+  const overallConclusion = `Анализ завершен. Найдено ${rightsImbalance.length} качественных дисбалансов.`;
   return { rightsImbalance, overallConclusion };
 }
 
@@ -2287,22 +2240,26 @@ async function classifyClauseParty(
     systemInstruction: `Ты - эксперт по классификации пунктов договоров поставки.`
   });
 
-  // --- Новый, более строгий промпт ---
-  const classifyPrompt = `Твоя задача - проанализировать каждый пункт и определить, какая из сторон получает в нем ОСНОВНОЕ право или преимущество.
+  const classifyPrompt = `Твоя задача - быть СТРОГИМ юристом. Проанализируй каждый пункт и определи, какая из сторон получает от него РЕАЛЬНОЕ ПРЕИМУЩЕСТВО или право.
 
 ПУНКТЫ ДЛЯ АНАЛИЗА:
 ${chunk.map(item => `- ${item.id}: ${item.text}`).join('\n\n')}
 
-Для КАЖДОГО пункта определи ДОМИНИРУЮЩУЮ сторону и ТИП права.
-- Если пункт дает право только одной стороне, выбери ее ("buyer" или "supplier").
-- Если пункт описывает взаимную процедуру без явного преимущества (например, "договор вступает в силу..."), используй "both".
-- Если пункт чисто информационный, используй "neutral".
-- **НЕ ИСПОЛЬЗУЙ "both" для пунктов, где есть явный перекос в одну сторону.** Например, в пункте о неустойках, даже если они взаимные, важно указать, чьи условия выгоднее.
+Для КАЖДОГО пункта определи ВЫГОДОПРИОБРЕТАТЕЛЯ и ТИП права.
+- "buyer": Пункт дает РЕАЛЬНОЕ, СИЛЬНОЕ право или преимущество Покупателю.
+- "supplier": Пункт дает РЕАЛЬНОЕ, СИЛЬНОЕ право или преимущество Поставщику.
+- "neutral": Пункт является чисто информационным, техническим или описывает ОБЯЗАННОСТЬ без предоставления явного права (например, "Покупатель обязан обеспечить подъездные пути").
+- "both": Используй ТОЛЬКО для абсолютно симметричных прав (например, "каждая из сторон вправе...").
+
+ПРИМЕРЫ ДЛЯ ОБУЧЕНИЯ:
+- Текст: "Поставщик гарантирует качество..." -> party: "neutral" (это обязанность Поставщика, а не сильное право Покупателя)
+- Текст: "Покупатель вправе проверить товар за свой счет..." -> party: "neutral" (право слабое, почти фиктивное, не дает реального преимущества)
+- Текст: "Подписание ТН подтверждает приемку по качеству" -> party: "supplier" (это преимущество для Поставщика, так как ограничивает права Покупателя на проверку)
 
 Используй 5 меток для ТИПА права:
 - "termination": Право на расторжение или прекращение договора.
 - "modification": Право на одностороннее изменение условий (цены, сроков).
-- "liability": Право на взыскание штрафов, пеней, неустоек.
+- "liability": Право на взыскание штрафов, пеней, неустоек, возмещение расходов.
 - "control": Право на проверку, приемку, отказ от товара.
 - "procedural": Другие процедурные права (подать заявку, предложить переговоры).
 
@@ -2318,8 +2275,8 @@ ${chunk.map(item => `- ${item.id}: ${item.text}`).join('\n\n')}
       contents: [{ role: "user", parts: [{ text: classifyPrompt }] }],
       generationConfig: {
         responseMimeType: "application/json",
-        temperature: 0.0, // Нулевая температура для максимальной точности
-        maxOutputTokens: 1000, // Очень маленький лимит, т.к. ответ короткий
+        temperature: 0.0,
+        maxOutputTokens: 1000,
         topP: 0.95,
         topK: 64,
       },
@@ -2330,7 +2287,6 @@ ${chunk.map(item => `- ${item.id}: ${item.text}`).join('\n\n')}
         },
       ],
     });
-    
     let rawResponse = result.response.text();
     if (!rawResponse || rawResponse.trim().length === 0) {
       await new Promise(resolve => setTimeout(resolve, 1500));
@@ -2368,7 +2324,30 @@ ${chunk.map(item => `- ${item.id}: ${item.text}`).join('\n\n')}
   }
 }
 
-// --- Новый "умный" анализ дисбаланса прав ---
+// --- Вспомогательная функция для извлечения максимального процента/суммы ---
+function extractFinancialValue(texts: string[]): number {
+  let maxValue = 0;
+  // Ищем проценты или значительные суммы в рублях
+  const valueRegex = /(\d[\d\s,.]*)\s*(%|руб)/g;
+
+  texts.forEach(text => {
+    const matches = Array.from(text.matchAll(valueRegex));
+    matches.forEach(match => {
+      // Убираем пробелы и заменяем запятую на точку для корректного парсинга
+      const numericString = match[1].replace(/\s/g, '').replace(',', '.');
+      const numericValue = parseFloat(numericString);
+      if (!isNaN(numericValue) && numericValue > maxValue) {
+        // Простое правило: если это рубли, и сумма больше 1000, считаем ее значимой. Проценты всегда значимы.
+        if (match[2] === '%' || (match[2] === 'руб' && numericValue > 1000)) {
+           maxValue = numericValue;
+        }
+      }
+    });
+  });
+  return maxValue;
+}
+
+// --- Новый качественный анализатор дисбаланса ---
 function analyzeRightsImbalanceSmart(
   classifiedClauses: Array<{ id: string; party: string; type: string }>,
   allParagraphs: Array<{ id: string; text: string }>

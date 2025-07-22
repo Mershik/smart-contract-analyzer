@@ -117,7 +117,9 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
           {Object.entries(groupedImbalances).map(([type, imbalances]) => {
             const mainImbalance = imbalances[0];
             const hasDetails = mainImbalance.buyerRightsClauses || mainImbalance.supplierRightsClauses;
-            
+            const buyerClauses = (mainImbalance.buyerRightsClauses || []).filter(clause => clause && clause.text);
+            const supplierClauses = (mainImbalance.supplierRightsClauses || []).filter(clause => clause && clause.text);
+            const bothColumns = buyerClauses.length > 0 && supplierClauses.length > 0;
             return (
               <div
                 key={type}
@@ -177,16 +179,16 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                 {/* Детализированная информация */}
                 {hasDetails && (
                   <div className="border-t bg-gray-50 p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Права покупателя */}
-                      {mainImbalance.buyerRightsClauses && mainImbalance.buyerRightsClauses.length > 0 && (
+                    <div className="grid md:grid-cols-2 grid-cols-1 gap-4">
+                      {/* Левая колонка: Покупатель */}
+                      {buyerClauses.length > 0 ? (
                         <div className="space-y-2">
                           <h4 className="font-medium text-blue-700 flex items-center gap-2">
                             <Users className="h-4 w-4" />
-                            Права Покупателя ({mainImbalance.buyerRightsClauses.length})
+                            Права Покупателя ({buyerClauses.length})
                           </h4>
                           <div className="space-y-1">
-                            {mainImbalance.buyerRightsClauses.map((clause) => (
+                            {buyerClauses.map((clause) => (
                               <div
                                 key={clause.id}
                                 className={
@@ -210,17 +212,18 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                             ))}
                           </div>
                         </div>
+                      ) : (
+                        <div className="min-h-[48px] bg-blue-50 rounded border-l-2 border-blue-100 opacity-60" />
                       )}
-
-                      {/* Права поставщика */}
-                      {mainImbalance.supplierRightsClauses && mainImbalance.supplierRightsClauses.length > 0 && (
+                      {/* Правая колонка: Поставщик */}
+                      {supplierClauses.length > 0 ? (
                         <div className="space-y-2">
                           <h4 className="font-medium text-green-700 flex items-center gap-2">
                             <Users className="h-4 w-4" />
-                            Права Поставщика ({mainImbalance.supplierRightsClauses.length})
+                            Права Поставщика ({supplierClauses.length})
                           </h4>
                           <div className="space-y-1">
-                            {mainImbalance.supplierRightsClauses.map((clause) => (
+                            {supplierClauses.map((clause) => (
                               <div
                                 key={clause.id}
                                 className={
@@ -244,6 +247,8 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                             ))}
                           </div>
                         </div>
+                      ) : (
+                        <div className="min-h-[48px] bg-green-50 rounded border-l-2 border-green-100 opacity-60" />
                       )}
                     </div>
                   </div>
