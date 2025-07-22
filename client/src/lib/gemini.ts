@@ -541,12 +541,36 @@ JSON:
       "comment": null,
       "recommendation": null
     }
-  ]
+  ],
+  "chunkRightsAnalysis": {
+    "buyerRightsCount": 2,
+    "supplierRightsCount": 1,
+    "rightsDetails": [
+      "Покупатель: право расторгнуть при просрочке (п. p1)",
+      "Покупатель: право отказаться от товара (п. p2)", 
+      "Поставщик: право изменить цену (п. p4)"
+    ],
+    "classifiedClauses": [
+      { "id": "p1", "party": "buyer", "type": "termination" },
+      { "id": "p2", "party": "buyer", "type": "control" },
+      { "id": "p4", "party": "supplier", "type": "modification" }
+    ]
+  }
 }
+
+ДОПОЛНИТЕЛЬНО: После основного анализа, подсчитай права в секции chunkRightsAnalysis:
+- buyerRightsCount: количество прав/оснований для покупателя в этом чанке
+- supplierRightsCount: количество прав/оснований для поставщика в этом чанке  
+- rightsDetails: краткий список найденных прав (формат: "Сторона: краткое описание (п. id)")
+- classifiedClauses: массив объектов с классификацией каждого права по стороне и типу:
+  * party: "buyer", "supplier", "both", "neutral"
+  * type: "termination" (расторжение), "modification" (изменение условий), "liability" (штрафы/неустойки), "control" (проверка/приемка), "procedural" (процедурные права)
 
 ЗАПОМНИ: 
 - Пункт p4 показывает, что неоднозначные формулировки должны быть "ambiguous" с комментариями
-- Пункт p5 показывает правильный формат для category: null - только нейтральные пункты БЕЗ комментариев!`;
+- Пункт p5 показывает правильный формат для category: null - только нейтральные пункты БЕЗ комментариев!
+- chunkRightsAnalysis должен содержать ТОЛЬКО права из текущего чанка!
+- classifiedClauses должен включать ВСЕ пункты с правами, даже если они "both" или "neutral"`;
 
       const result = await model.generateContent({
         contents: [{ role: "user", parts: [{ text: chunkPrompt }] }],
@@ -1625,13 +1649,22 @@ async function findContradictions(
 ${JSON.stringify(analyzedSummary, null, 2)}
 
 Ищи противоречия в:
-- Сроках (разные сроки для одинаковых процедур)
-- Суммах и процентах (разные размеры штрафов/пени)
-- Ответственности (кто за что отвечает)
-- Условиях расторжения или изменения
-- Юридических требованиях
+- **Сроках** (разные сроки для одинаковых процедур)
+- **Суммах и процентах** (разные размеры штрафов/пени для аналогичных нарушений)
+- **Ответственности** (кто за что отвечает, пересекающиеся зоны ответственности)
+- **Условиях расторжения или изменения** (конфликтующие основания)
+- **Юридических требованиях** (противоречащие нормы и процедуры)
+- **Процедурных конфликтах** (наличие двух разных механизмов для одной цели, которые ослабляют друг друга). 
+  ПРИМЕР: если есть право расторжения за нарушение (п. 7.5) И право расторжения без причины (п. 7.8), это процедурный конфликт - зачем сложная процедура, если можно расторгнуть без причины?
+- **Логических несоответствиях** (пункты, которые делают друг друга бессмысленными или неприменимыми)
+- **Приоритетных конфликтах** (когда неясно, какой пункт имеет преимущество при столкновении)
 
-Если противоречий нет, верни пустой массив. Если есть - укажи до 5 самых критичных.
+ОСОБОЕ ВНИМАНИЕ к тонким противоречиям:
+- Разные процедуры для одного результата
+- Пункты, которые обходят или нейтрализуют другие пункты
+- Конфликты между общими и специальными нормами
+
+Если противоречий нет, верни пустой массив. Если есть - укажи до 7 самых критичных.
 
 Верни JSON:
 {
@@ -1656,7 +1689,15 @@ ${JSON.stringify(analyzedSummary, null, 2)}
   ]
 }
 
-Типы противоречий: "temporal" (временные), "financial" (финансовые), "quantitative" (количественные), "legal" (правовые)
+Типы противоречий: 
+- "temporal" (временные)
+- "financial" (финансовые) 
+- "quantitative" (количественные)
+- "legal" (правовые)
+- "procedural" (процедурные конфликты)
+- "logical" (логические несоответствия)
+- "priority" (приоритетные конфликты)
+
 Уровни серьезности: "high", "medium", "low"`;
 
   try {
@@ -1701,109 +1742,582 @@ ${JSON.stringify(analyzedSummary, null, 2)}
   }
 }
 
-// Функция анализа дисбаланса прав между сторонами
-async function findRightsImbalance(
+// Интеллектуальная приоритизация пунктов для анализа дисбаланса прав
+function getPrioritizedItemsForRightsAnalysis(
   allAnalysis: any[],
   paragraphs: Array<{ id: string; text: string }>,
   perspective: 'buyer' | 'supplier',
-  onProgress: (message: string) => void
-): Promise<any> {
-  console.log(`🔄 НАЧАЛО функции findRightsImbalance: Анализ дисбаланса прав (всего анализов: ${allAnalysis.length})`);
-  // onProgress уже вызван в основной функции
-  
-  console.log(`📊 DEBUG findRightsImbalance: Собираю пункты для анализа прав...`);
-  
-  // Собираем пункты, касающиеся прав и оснований для действий
-  const rightsRelatedItems = allAnalysis
-    .filter(item => item.category && ['risk', 'partial', 'checklist'].includes(item.category))
+  maxItems: number = 25
+): any[] {
+  console.log('🔍 Приоритизация пунктов для анализа дисбаланса прав...');
+
+  // Ключевые слова по типам прав (с весами важности)
+  const rightsKeywords = {
+    termination: { 
+      keywords: ['расторжен', 'расторгнуть', 'отказаться от договора', 'прекратить действие', 'досрочное расторжение'], 
+      weight: 20 
+    },
+    liability: { 
+      keywords: ['ответственность', 'неустойка', 'пеня', 'штраф', 'убытки', 'возмещение', 'компенсация'], 
+      weight: 18 
+    },
+    modification: { 
+      keywords: ['в одностороннем порядке', 'изменить цену', 'увеличить стоимость', 'пересмотр условий', 'корректировка'], 
+      weight: 16 
+    },
+    control: { 
+      keywords: ['контроль', 'проверка', 'инспекция', 'аудит', 'мониторинг', 'надзор'], 
+      weight: 14 
+    },
+    suspension: { 
+      keywords: ['приостановить', 'приостановка', 'временно прекратить', 'заморозить'], 
+      weight: 12 
+    },
+    refusal: { 
+      keywords: ['отказ', 'отклонить', 'не принимать', 'вернуть'], 
+      weight: 10 
+    }
+  };
+
+  // Дополнительные веса в зависимости от перспективы
+  const perspectiveBonus = perspective === 'buyer' ? 
+    ['поставщик обязан', 'покупатель вправе', 'покупатель может'] :
+    ['покупатель обязан', 'поставщик вправе', 'поставщик может'];
+
+  const prioritized = allAnalysis
     .map(item => {
       const paragraph = paragraphs.find(p => p.id === item.id);
+      const fullText = paragraph?.text || '';
+      const analysisText = (item.comment || '') + ' ' + (item.recommendation || '');
+      const combinedText = (fullText + ' ' + analysisText).toLowerCase();
+      
+      let score = 0;
+
+      // 1. Базовый приоритет по категории
+      if (item.category === 'risk') score += 15;
+      if (item.category === 'deemed_acceptance') score += 12;
+      if (item.category === 'partial') score += 8;
+      if (item.category === 'checklist') score += 5;
+
+      // 2. Приоритет по ключевым словам прав
+      Object.values(rightsKeywords).forEach(({ keywords, weight }) => {
+        const hasKeyword = keywords.some(keyword => combinedText.includes(keyword));
+        if (hasKeyword) score += weight;
+      });
+
+      // 3. Бонус за перспективу
+      perspectiveBonus.forEach(phrase => {
+        if (combinedText.includes(phrase)) score += 8;
+      });
+
+      // 4. Бонус за длину анализа (более детальный анализ = важнее)
+      if (analysisText.length > 100) score += 5;
+      if (analysisText.length > 200) score += 3;
+
+      // 5. Штраф за слишком общие формулировки
+      const genericPhrases = ['в соответствии с', 'согласно законодательству', 'стороны договорились'];
+      const hasGeneric = genericPhrases.some(phrase => combinedText.includes(phrase));
+      if (hasGeneric && score < 10) score -= 3;
+
       return {
         id: item.id,
-        text: paragraph?.text?.substring(0, 200) + ((paragraph?.text && paragraph.text.length > 200) ? '...' : ''),
+        text: fullText.substring(0, 200) + (fullText.length > 200 ? '...' : ''),
         category: item.category,
-        comment: item.comment?.substring(0, 150) || null
+        comment: item.comment?.substring(0, 150) || null,
+        recommendation: item.recommendation?.substring(0, 100) || null,
+        score: Math.max(0, score) // Не даем отрицательные баллы
       };
     })
-    .slice(0, 20); // Ограничиваем количество пунктов
+    .filter(item => item.score > 0) // Отбрасываем нерелевантные пункты
+    .sort((a, b) => b.score - a.score); // Сортируем по убыванию значимости
 
-  console.log(`🔍 DEBUG findRightsImbalance: Отфильтровано пунктов для анализа прав: ${rightsRelatedItems.length}`);
+  console.log(`📊 Топ-5 самых значимых пунктов:`, 
+    prioritized.slice(0, 5).map(p => ({ 
+      id: p.id, 
+      score: p.score, 
+      category: p.category,
+      preview: p.comment?.substring(0, 40) + '...' 
+    }))
+  );
 
-  if (rightsRelatedItems.length < 3) {
-    console.log("🔍 DEBUG findRightsImbalance: Недостаточно пунктов для анализа дисбаланса прав");
-    return { rightsImbalance: [] };
+  console.log(`📈 Статистика приоритизации: всего ${allAnalysis.length} → отобрано ${Math.min(prioritized.length, maxItems)} пунктов`);
+
+  return prioritized.slice(0, maxItems);
+}
+
+// Поиск структурных дефектов и опечаток в договоре
+async function findStructuralDefects(
+  paragraphs: Array<{ id: string; text: string }>,
+  perspective: 'buyer' | 'supplier',
+  onProgress: (message: string) => void
+): Promise<any[]> {
+  console.log("🔍 Начинаем поиск структурных дефектов...");
+  
+  const defects: any[] = [];
+  
+  // Шаг 1: Создаем карту всех существующих пунктов договора
+  const clauseMap = new Map<string, { id: string; text: string; number: string }>();
+  const clauseNumbers = new Set<string>();
+  
+  paragraphs.forEach(p => {
+    // Извлекаем номер пункта из начала текста (1., 2.1., 10.2.1. и т.д.)
+    const match = p.text.match(/^(\d+(?:\.\d+)*\.?)\s/);
+    if (match) {
+      const clauseNumber = match[1].replace(/\.$/, ''); // Убираем точку в конце
+      clauseMap.set(clauseNumber, { id: p.id, text: p.text, number: clauseNumber });
+      clauseNumbers.add(clauseNumber);
+    }
+  });
+
+  console.log(`📋 Найдено пунктов с номерами: ${clauseNumbers.size}`);
+
+  // Шаг 2: Находим все ссылки на другие пункты в тексте
+  const referenceRegex = /(?:п|пункт|пункте|пункту|пунктом|пунктах|подпункт|подпункте)\.?\s*(\d+(?:\.\d+)*\.?)/gi;
+  
+  for (const paragraph of paragraphs) {
+    const matches = Array.from(paragraph.text.matchAll(referenceRegex));
+    
+    for (const match of matches) {
+      const referencedClauseNumber = match[1].replace(/\.$/, ''); // Убираем точку
+      const fullMatch = match[0];
+      
+      // Шаг 3: Проверяем "битые" ссылки
+      if (!clauseNumbers.has(referencedClauseNumber)) {
+        // Ищем похожие номера для предложения исправления
+        const similarNumbers = Array.from(clauseNumbers).filter(num => 
+          num.startsWith(referencedClauseNumber.split('.')[0]) || 
+          referencedClauseNumber.startsWith(num.split('.')[0])
+        );
+        
+        defects.push({
+          id: `broken_ref_${paragraph.id}_${referencedClauseNumber}`,
+          type: 'broken_reference',
+          description: `Ссылка на несуществующий пункт ${referencedClauseNumber} в тексте: "${fullMatch}"`,
+          severity: 'high',
+          recommendation: similarNumbers.length > 0 
+            ? `Возможно, имелся в виду пункт: ${similarNumbers.slice(0, 3).join(', ')}`
+            : `Проверить корректность ссылки на пункт ${referencedClauseNumber}`,
+          location: paragraph.id,
+          context: paragraph.text.substring(Math.max(0, match.index! - 50), match.index! + 100)
+        });
+      }
+      
+      // Шаг 4: Проверяем самоссылки (пункт ссылается сам на себя)
+      const currentClauseMatch = paragraph.text.match(/^(\d+(?:\.\d+)*\.?)\s/);
+      if (currentClauseMatch) {
+        const currentClauseNumber = currentClauseMatch[1].replace(/\.$/, '');
+        if (referencedClauseNumber === currentClauseNumber) {
+          defects.push({
+            id: `self_ref_${paragraph.id}`,
+            type: 'self_reference',
+            description: `Пункт ${currentClauseNumber} ссылается сам на себя`,
+            severity: 'medium',
+            recommendation: `Проверить логичность самоссылки или исправить на корректный пункт`,
+            location: paragraph.id,
+            context: paragraph.text.substring(0, 200)
+          });
+        }
+      }
+    }
   }
 
-  console.log(`📊 DEBUG findRightsImbalance: Получаю API ключ...`);
+  // Шаг 5: Специфические проверки с помощью AI для сложных случаев
+  if (defects.length < 10) { // Вызываем AI только если не слишком много простых дефектов
+    try {
+      const aiDefects = await findLogicalDefectsWithAI(paragraphs, clauseMap, perspective);
+      defects.push(...aiDefects);
+    } catch (error) {
+      console.error("❌ Ошибка AI-анализа структурных дефектов:", error);
+    }
+  }
+
+  // Шаг 6: Поиск циклических ссылок
+  const cyclicDefects = findCyclicReferences(paragraphs, clauseMap);
+  defects.push(...cyclicDefects);
+
+  console.log(`✅ Найдено структурных дефектов: ${defects.length}`);
+  return defects;
+}
+
+// AI-анализ логических дефектов
+async function findLogicalDefectsWithAI(
+  paragraphs: Array<{ id: string; text: string }>,
+  clauseMap: Map<string, any>,
+  perspective: 'buyer' | 'supplier'
+): Promise<any[]> {
+  // Ищем подозрительные паттерны для AI-анализа
+  const suspiciousParagraphs = paragraphs.filter(p => {
+    const text = p.text.toLowerCase();
+    return text.includes('нарушение положений п.') || 
+           text.includes('в соответствии с п.') ||
+           text.includes('согласно п.') ||
+           (text.includes('ответственность') && text.includes('п.'));
+  });
+
+  if (suspiciousParagraphs.length === 0) return [];
+
   const keyToUse = keyPool.getNextKey();
-  console.log(`📊 DEBUG findRightsImbalance: Создаю модель Gemini...`);
   const genAI = new GoogleGenerativeAI(keyToUse);
   const model = genAI.getGenerativeModel({ 
     model: MODEL_NAME,
-    systemInstruction: `Ты - эксперт по анализу договоров. Анализируй с точки зрения ${perspective === 'buyer' ? 'Покупателя' : 'Поставщика'}.`
+    systemInstruction: `Ты - эксперт по структурному анализу договоров.`
   });
 
-  console.log(`📊 DEBUG findRightsImbalance: Формирую промпт для анализа...`);
-  
-  // Улучшенный детальный промпт
-  const rightsPrompt = `Проанализируй ДИСБАЛАНС ПРАВ между Покупателем и Поставщиком в договоре поставки.
+  const logicalPrompt = `Проанализируй следующие пункты договора на предмет логических ошибок в ссылках:
 
-АНАЛИЗИРУЕМЫЕ ПУНКТЫ ДОГОВОРА:
-${rightsRelatedItems.map(item => `- ${item.id}: ${item.text}${item.comment ? ` (Комментарий: ${item.comment})` : ''}`).join('\n')}
+ПУНКТЫ ДЛЯ АНАЛИЗА:
+${suspiciousParagraphs.map(p => `${p.id}: ${p.text.substring(0, 300)}`).join('\n\n')}
 
-Найди дисбалансы в следующих областях:
+ДОСТУПНЫЕ ПУНКТЫ В ДОГОВОРЕ:
+${Array.from(clauseMap.keys()).sort().join(', ')}
 
-1. **ПРАВА РАСТОРЖЕНИЯ** (termination_rights):
-   - Сколько оснований для расторжения есть у Покупателя?
-   - Сколько оснований для расторжения есть у Поставщика?
-   - Есть ли асимметрия в процедурах расторжения?
-
-2. **ПРАВА ИЗМЕНЕНИЯ** (modification_rights):
-   - Кто может изменять цены, сроки, условия?
-   - Требуется ли согласие другой стороны?
-   - Есть ли односторонние права изменения?
-
-3. **КОНТРОЛЬНЫЕ ПРАВА** (control_rights):
-   - Кто контролирует качество товара?
-   - Кто определяет соответствие требованиям?
-   - Кто может отказаться от исполнения?
-
-4. **ПРАВА ОТВЕТСТВЕННОСТИ** (liability_rights):
-   - Размер ответственности каждой стороны
-   - Ограничения ответственности
-   - Права на возмещение убытков
-
-Для каждого найденного дисбаланса подсчитай количество прав/оснований у каждой стороны.
+Найди логические ошибки:
+1. Пункты об ответственности, которые ссылаются сами на себя вместо пунктов с обязательствами
+2. Ссылки на неподходящие по смыслу пункты
+3. Отсутствие ссылок там, где они логически необходимы
 
 Верни JSON:
 {
-  "rightsImbalance": [
+  "logicalDefects": [
     {
-      "id": "imbalance_1",
-      "type": "termination_rights",
-      "description": "Детальное описание дисбаланса с примерами из договора",
-      "buyerRights": 2,
-      "supplierRights": 4,
+      "id": "logic_error_1",
+      "type": "logical_error",
+      "description": "Описание логической ошибки",
       "severity": "high",
-      "recommendation": "Конкретная рекомендация по выравниванию прав"
+      "recommendation": "Как исправить",
+      "location": "id пункта"
     }
   ]
-}
-
-ВАЖНО: 
-- Анализируй только реальные дисбалансы, не выдумывай
-- Если дисбалансов нет, верни пустой массив
-- Укажи конкретные цифры прав у каждой стороны
-- Severity: "high" - критичный дисбаланс, "medium" - заметный, "low" - незначительный`;
+}`;
 
   try {
-    console.log(`📊 DEBUG findRightsImbalance: Отправляю запрос к Gemini...`);
     const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: rightsPrompt }] }],
+      contents: [{ role: "user", parts: [{ text: logicalPrompt }] }],
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.1,
-        maxOutputTokens: 8000,
+        maxOutputTokens: 4000,
+      },
+    });
+
+    const rawResponse = result.response.text();
+    const parsed = extractJsonFromResponse(rawResponse);
+    return parsed.logicalDefects || [];
+  } catch (error) {
+    console.error("❌ Ошибка AI-анализа логических дефектов:", error);
+    return [];
+  }
+}
+
+// Поиск циклических ссылок
+function findCyclicReferences(
+  paragraphs: Array<{ id: string; text: string }>,
+  clauseMap: Map<string, any>
+): any[] {
+  const defects: any[] = [];
+  const referenceGraph = new Map<string, string[]>();
+
+  // Строим граф ссылок
+  paragraphs.forEach(p => {
+    const currentMatch = p.text.match(/^(\d+(?:\.\d+)*\.?)\s/);
+    if (!currentMatch) return;
+    
+    const currentClause = currentMatch[1].replace(/\.$/, '');
+    const references: string[] = [];
+    
+    const referenceRegex = /(?:п|пункт|пункте|пункту)\.?\s*(\d+(?:\.\d+)*\.?)/gi;
+    let match;
+    while ((match = referenceRegex.exec(p.text)) !== null) {
+      const refClause = match[1].replace(/\.$/, '');
+      if (refClause !== currentClause) {
+        references.push(refClause);
+      }
+    }
+    
+    if (references.length > 0) {
+      referenceGraph.set(currentClause, references);
+    }
+  });
+
+  // Ищем циклы (простая проверка A->B->A)
+  for (const [clause, refs] of Array.from(referenceGraph.entries())) {
+    for (const ref of refs) {
+      const refRefs = referenceGraph.get(ref);
+      if (refRefs && refRefs.includes(clause)) {
+        defects.push({
+          id: `cycle_${clause}_${ref}`,
+          type: 'cyclic_reference',
+          description: `Обнаружена циклическая ссылка: пункт ${clause} ссылается на ${ref}, который ссылается обратно на ${clause}`,
+          severity: 'medium',
+          recommendation: `Пересмотреть логику ссылок между пунктами ${clause} и ${ref}`,
+          location: clause
+        });
+      }
+    }
+  }
+
+  return defects;
+}
+
+// Новая функция агрегации и анализа прав с взвешиванием (гибридный подход)
+function analyzeRightsImbalanceProgrammatically(
+  classifiedClauses: Array<{ id: string; party: string; type: string }>,
+  chunkResults: any[],
+  allParagraphs?: Array<{ id: string; text: string }>
+): any {
+  console.log(`🔍 Шаг 5.2: Взвешенный программный анализ дисбаланса...`);
+  const rightsImbalance: any[] = [];
+  
+  // Веса для разных типов прав
+  const weights = {
+    modification: 10, // Самое "сильное" право
+    liability: 8,
+    termination: 7,
+    control: 5,
+    procedural: 2 // Самое "слабое" право
+  };
+
+  let buyerScore = 0;
+  let supplierScore = 0;
+
+  // 1. Считаем общий "вес" прав для каждой стороны
+  classifiedClauses.forEach(clause => {
+    const weight = weights[clause.type as keyof typeof weights] || 1;
+    if (clause.party === 'buyer') {
+      buyerScore += weight;
+    } else if (clause.party === 'supplier') {
+      supplierScore += weight;
+    }
+  });
+
+  console.log(`📊 Взвешенные счета: покупатель ${buyerScore}, поставщик ${supplierScore}`);
+
+  // 2. Анализируем общий баланс по "весу"
+  const totalScore = buyerScore + supplierScore;
+  if (totalScore > 0) {
+    const buyerPercentage = Math.round((buyerScore / totalScore) * 100);
+    const supplierPercentage = Math.round((supplierScore / totalScore) * 100);
+    const scoreDifference = Math.abs(buyerScore - supplierScore);
+    const maxScore = Math.max(buyerScore, supplierScore);
+    const imbalancePercentage = maxScore > 0 ? Math.round((scoreDifference / maxScore) * 100) : 0;
+
+    if (imbalancePercentage > 30) { // Снижаем порог для взвешенного анализа
+      const favoredParty = buyerScore > supplierScore ? "покупателя" : "поставщика";
+      const severity = imbalancePercentage > 60 ? "high" : "medium";
+      
+      rightsImbalance.push({
+        id: "weighted_imbalance",
+        type: "weighted_analysis",
+        description: `Взвешенный дисбаланс прав в пользу ${favoredParty}. Взвешенный счет: Покупатель ${buyerScore} (${buyerPercentage}%), Поставщик ${supplierScore} (${supplierPercentage}%).`,
+        buyerRights: buyerScore,
+        supplierRights: supplierScore,
+        severity: severity,
+        recommendation: `Рекомендуется пересмотреть распределение прав, особенно в категориях с высоким весом.`
+      });
+    }
+  }
+
+  // Функция для получения текста пункта
+  const getParagraphText = (id: string): string => {
+    if (allParagraphs) {
+      const paragraph = allParagraphs.find(p => p.id === id);
+      return paragraph ? paragraph.text : `Пункт ${id}`;
+    }
+    return `Пункт ${id}`;
+  };
+
+  // 3. Анализируем дисбаланс ВНУТРИ каждой категории
+  for (const type in weights) {
+    const buyerRightsInCategory = classifiedClauses.filter(c => c.party === 'buyer' && c.type === type);
+    const supplierRightsInCategory = classifiedClauses.filter(c => c.party === 'supplier' && c.type === type);
+
+    if (buyerRightsInCategory.length !== supplierRightsInCategory.length) {
+      // Если есть явный перекос в какой-то из категорий, создаем отдельный пункт отчета
+      if (Math.abs(buyerRightsInCategory.length - supplierRightsInCategory.length) > 0) { // Любой перекос
+        const typeNames = {
+          termination: "расторжения договора",
+          modification: "изменения условий",
+          liability: "взыскания штрафов/неустоек",
+          control: "контроля и проверки",
+          procedural: "процедурных прав"
+        };
+
+        // Формируем детали по пунктам
+        const buyerRightsClauses = buyerRightsInCategory.map(clause => ({
+          id: clause.id,
+          text: getParagraphText(clause.id),
+          summary: `Право ${typeNames[type as keyof typeof typeNames] || type}`
+        }));
+
+        const supplierRightsClauses = supplierRightsInCategory.map(clause => ({
+          id: clause.id,
+          text: getParagraphText(clause.id),
+          summary: `Право ${typeNames[type as keyof typeof typeNames] || type}`
+        }));
+        
+        rightsImbalance.push({
+          id: `imbalance_${type}`,
+          type: type,
+          description: `Обнаружен дисбаланс в сфере '${typeNames[type as keyof typeof typeNames] || type}'. Прав Покупателя: ${buyerRightsInCategory.length}, прав Поставщика: ${supplierRightsInCategory.length}.`,
+          buyerRights: buyerRightsInCategory.length,
+          supplierRights: supplierRightsInCategory.length,
+          severity: 'medium',
+          recommendation: `Рекомендуется пересмотреть права сторон в области '${typeNames[type as keyof typeof typeNames] || type}'.`,
+          buyerRightsClauses: buyerRightsClauses,
+          supplierRightsClauses: supplierRightsClauses
+        });
+      }
+    }
+  }
+
+  const overallConclusion = `Взвешенный анализ завершен. Общий взвешенный счет Покупателя: ${buyerScore}, Поставщика: ${supplierScore}. Найдено дисбалансов: ${rightsImbalance.length}.`;
+  
+  console.log(`✅ Взвешенный анализ завершен: найдено ${rightsImbalance.length} дисбалансов`);
+  
+  return { rightsImbalance, overallConclusion };
+}
+
+// Функция агрегации прав из чанков (для совместимости)
+function aggregateAndAnalyzeRights(chunkResults: any[]): any {
+  console.log(`🔄 Начинаем агрегацию прав из ${chunkResults.length} чанков`);
+  
+  let totalBuyerRights = 0;
+  let totalSupplierRights = 0;
+  const allRightsDetails: string[] = [];
+  const allClassifiedClauses: Array<{ id: string; party: string; type: string }> = [];
+  
+  // Собираем данные из всех чанков
+  chunkResults.forEach((chunkResult, index) => {
+    if (chunkResult && chunkResult.chunkRightsAnalysis) {
+      const rightsAnalysis = chunkResult.chunkRightsAnalysis;
+      
+      totalBuyerRights += rightsAnalysis.buyerRightsCount || 0;
+      totalSupplierRights += rightsAnalysis.supplierRightsCount || 0;
+      
+      if (rightsAnalysis.rightsDetails && Array.isArray(rightsAnalysis.rightsDetails)) {
+        allRightsDetails.push(...rightsAnalysis.rightsDetails);
+      }
+      
+      // Собираем классифицированные пункты если они есть
+      if (rightsAnalysis.classifiedClauses && Array.isArray(rightsAnalysis.classifiedClauses)) {
+        allClassifiedClauses.push(...rightsAnalysis.classifiedClauses);
+      }
+      
+      console.log(`  ✅ Чанк ${index + 1}: покупатель ${rightsAnalysis.buyerRightsCount || 0}, поставщик ${rightsAnalysis.supplierRightsCount || 0}`);
+    } else {
+      console.warn(`  ⚠️ Чанк ${index + 1}: отсутствует chunkRightsAnalysis`);
+    }
+  });
+  
+  console.log(`📊 Итого прав: покупатель ${totalBuyerRights}, поставщик ${totalSupplierRights}`);
+  
+  // Если у нас есть классифицированные пункты, используем взвешенный анализ
+  if (allClassifiedClauses.length > 0) {
+    console.log(`🎯 Переходим к взвешенному анализу с ${allClassifiedClauses.length} классифицированными пунктами`);
+    // Извлекаем параграфы из чанков для передачи в анализ
+    const allParagraphs: Array<{ id: string; text: string }> = [];
+    chunkResults.forEach(chunkResult => {
+      if (chunkResult && chunkResult.analysis) {
+        chunkResult.analysis.forEach((item: any) => {
+          // Находим соответствующий параграф в чанке
+          const chunkParagraphs = chunkResult.paragraphs || [];
+          const paragraph = chunkParagraphs.find((p: any) => p.id === item.id);
+          if (paragraph) {
+            allParagraphs.push({ id: paragraph.id, text: paragraph.text });
+          }
+        });
+      }
+    });
+    return analyzeRightsImbalanceProgrammatically(allClassifiedClauses, chunkResults, allParagraphs);
+  }
+  
+  // Иначе используем простую логику (для обратной совместимости)
+  const rightsImbalance: any[] = [];
+  let overallConclusion = "";
+  
+  if (totalBuyerRights === 0 && totalSupplierRights === 0) {
+    overallConclusion = "В договоре не обнаружено явных прав сторон для анализа дисбаланса.";
+  } else {
+    const totalRights = totalBuyerRights + totalSupplierRights;
+    const buyerPercentage = Math.round((totalBuyerRights / totalRights) * 100);
+    const supplierPercentage = Math.round((totalSupplierRights / totalRights) * 100);
+    
+    // Определяем дисбаланс
+    const difference = Math.abs(totalBuyerRights - totalSupplierRights);
+    const maxRights = Math.max(totalBuyerRights, totalSupplierRights);
+    const imbalancePercentage = maxRights > 0 ? Math.round((difference / maxRights) * 100) : 0;
+    
+    if (imbalancePercentage > 50) {
+      const favoredParty = totalBuyerRights > totalSupplierRights ? "покупателя" : "поставщика";
+      const severity = imbalancePercentage > 75 ? "high" : "medium";
+      
+      rightsImbalance.push({
+        id: "imbalance_1",
+        type: "general_rights",
+        description: `Значительный дисбаланс прав в пользу ${favoredParty}. Покупатель: ${totalBuyerRights} прав (${buyerPercentage}%), Поставщик: ${totalSupplierRights} прав (${supplierPercentage}%).`,
+        buyerRights: totalBuyerRights,
+        supplierRights: totalSupplierRights,
+        severity: severity,
+        recommendation: `Рекомендуется сбалансировать права сторон, добавив дополнительные права для ${favoredParty === "покупателя" ? "поставщика" : "покупателя"}.`
+      });
+      
+      overallConclusion = `Обнаружен ${severity === "high" ? "критический" : "значительный"} дисбаланс прав в пользу ${favoredParty}. Соотношение: ${buyerPercentage}% к ${supplierPercentage}%.`;
+    } else {
+      overallConclusion = `Права сторон относительно сбалансированы. Покупатель: ${totalBuyerRights} прав (${buyerPercentage}%), Поставщик: ${totalSupplierRights} прав (${supplierPercentage}%).`;
+    }
+  }
+  
+  console.log(`✅ Агрегация завершена: найдено ${rightsImbalance.length} дисбалансов`);
+  
+  return {
+    rightsImbalance,
+    overallConclusion,
+    totalBuyerRights,
+    totalSupplierRights,
+    allRightsDetails
+  };
+}
+
+// Шаг 5.1: Улучшенная функция классификации пунктов по сторонам И типу права (гибридный подход)
+async function classifyClauseParty(
+  chunk: any[], // Чанк из 5 приоритетных пунктов
+  perspective: 'buyer' | 'supplier'
+): Promise<Array<{ id: string; party: 'buyer' | 'supplier' | 'both' | 'neutral'; type: string }>> {
+  
+  const keyToUse = keyPool.getNextKey();
+  const genAI = new GoogleGenerativeAI(keyToUse);
+  const model = genAI.getGenerativeModel({ 
+    model: MODEL_NAME,
+    systemInstruction: `Ты - эксперт по классификации пунктов договоров поставки.`
+  });
+
+  const classifyPrompt = `Твоя задача - определить, в чью пользу и к КАКОМУ ТИПУ ПРАВ относится каждый пункт.
+
+ПУНКТЫ ДЛЯ АНАЛИЗА:
+${chunk.map(item => `- ${item.id}: ${item.text}`).join('\n\n')}
+
+Используй 4 метки для стороны ("buyer", "supplier", "both", "neutral").
+Используй 5 меток для ТИПА права:
+- "termination": Право на расторжение или прекращение договора.
+- "modification": Право на одностороннее изменение условий (цены, сроков).
+- "liability": Право на взыскание штрафов, пеней, неустоек.
+- "control": Право на проверку, приемку, отказ от товара.
+- "procedural": Другие процедурные права (подать заявку, предложить переговоры).
+
+Верни ТОЛЬКО JSON в формате списка:
+[
+  { "id": "p52", "party": "buyer", "type": "liability" },
+  { "id": "p75", "party": "buyer", "type": "termination" },
+  { "id": "p44", "party": "supplier", "type": "modification" }
+]`;
+
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: classifyPrompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.0, // Нулевая температура для максимальной точности
+        maxOutputTokens: 1000, // Очень маленький лимит, т.к. ответ короткий
         topP: 0.95,
         topK: 64,
       },
@@ -1812,78 +2326,246 @@ ${rightsRelatedItems.map(item => `- ${item.id}: ${item.text}${item.comment ? ` (
           category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
           threshold: HarmBlockThreshold.BLOCK_NONE,
         },
+      ],
+    });
+    
+    let rawResponse = result.response.text();
+    
+    // Механизм повторной попытки при пустом ответе
+    if (!rawResponse || rawResponse.trim().length === 0) {
+      console.warn(`  -> Классификация чанка вернула пустой ответ. Повторная попытка через 1.5 сек...`);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      try {
+        const secondTryResult = await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: classifyPrompt }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.0,
+            maxOutputTokens: 1000,
+            topP: 0.95,
+            topK: 64,
+          },
+          safetySettings: [
+            {
+              category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+              threshold: HarmBlockThreshold.BLOCK_NONE,
+            },
+          ],
+        });
+        rawResponse = secondTryResult.response.text();
+        if (rawResponse && rawResponse.trim().length > 0) {
+          console.log(`  ✅ Повторная попытка классификации успешна!`);
+        } else {
+          console.warn(`  ❌ Повторная попытка классификации также вернула пустой ответ.`);
+        }
+      } catch (retryError) {
+        console.error(`  ❌ Ошибка при повторной попытке классификации:`, retryError);
+      }
+    }
+
+    if (rawResponse && rawResponse.trim().length > 0) {
+      const parsed = extractJsonFromResponse(rawResponse);
+      return Array.isArray(parsed) ? parsed : []; // Возвращаем массив или пустой массив
+    } else {
+      console.warn(`  -> Классификация чанка окончательно вернула пустой ответ.`);
+      return [];
+    }
+
+  } catch (error) {
+    console.error(`❌ Ошибка при классификации чанка:`, error);
+    if (error instanceof Error && error.message.includes('429')) {
+      keyPool.markKeyAsExhausted(keyToUse);
+    }
+    return [];
+  }
+}
+
+// Шаг 5.2: Анализ дисбаланса на основе извлеченных прав (фокусированная задача)
+async function analyzeRightsImbalance(
+  extractedRights: { buyerRightsList: string[], supplierRightsList: string[] },
+  perspective: 'buyer' | 'supplier'
+): Promise<any> {
+  console.log(`🔍 Шаг 5.2: Анализ дисбаланса на основе извлеченных прав`);
+  
+  if (extractedRights.buyerRightsList.length === 0 && extractedRights.supplierRightsList.length === 0) {
+    return { 
+      rightsImbalance: [], 
+      overallConclusion: "Не удалось извлечь достаточно прав для анализа дисбаланса." 
+    };
+  }
+
+  const keyToUse = keyPool.getNextKey();
+  const genAI = new GoogleGenerativeAI(keyToUse);
+  const model = genAI.getGenerativeModel({ 
+    model: MODEL_NAME,
+    systemInstruction: `Ты - эксперт по анализу дисбаланса прав в договорах поставки.`
+  });
+
+  const analysisPrompt = `Проанализируй извлеченные права сторон и определи дисбалансы.
+
+ПРАВА ПОКУПАТЕЛЯ (${extractedRights.buyerRightsList.length}):
+${extractedRights.buyerRightsList.map((right, i) => `${i + 1}. ${right}`).join('\n')}
+
+ПРАВА ПОСТАВЩИКА (${extractedRights.supplierRightsList.length}):
+${extractedRights.supplierRightsList.map((right, i) => `${i + 1}. ${right}`).join('\n')}
+
+Найди дисбалансы в областях:
+- termination_rights (права расторжения)
+- modification_rights (права изменения условий)
+- liability_rights (права взыскания штрафов/неустоек)
+- suspension_rights (права приостановки)
+- control_rights (контрольные права)
+
+Верни JSON:
+{
+  "rightsImbalance": [
+    {
+      "id": "imbalance_1",
+      "type": "liability_rights",
+      "description": "Конкретное описание дисбаланса с примерами из списков прав",
+      "buyerRights": ${extractedRights.buyerRightsList.length},
+      "supplierRights": ${extractedRights.supplierRightsList.length},
+      "severity": "high",
+      "recommendation": "Конкретная рекомендация по выравниванию"
+    }
+  ],
+  "overallConclusion": "Краткий вывод о том, в чью сторону смещен баланс и в каких областях"
+}
+
+ВАЖНО: Анализируй только предоставленные права, не выдумывай дисбалансы.`;
+
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: analysisPrompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1,
+        maxOutputTokens: 3000, // Еще меньше для фокусированной задачи
+        topP: 0.95,
+        topK: 64,
+      },
+      safetySettings: [
         {
-          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-          threshold: HarmBlockThreshold.BLOCK_NONE,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-          threshold: HarmBlockThreshold.BLOCK_NONE,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+          category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
           threshold: HarmBlockThreshold.BLOCK_NONE,
         },
       ],
     });
 
-    console.log(`📊 DEBUG findRightsImbalance: Получен ответ от Gemini`);
     const rawResponse = result.response.text();
-    console.log("🔍 Сырой ответ анализа дисбаланса прав:", rawResponse.substring(0, 300));
+    console.log(`📊 Шаг 5.2: Получен ответ длиной ${rawResponse.length} символов`);
     
-    if (!rawResponse || rawResponse.trim() === '') {
-      console.log("⚠️ DEBUG findRightsImbalance: Пустой ответ при анализе дисбаланса прав");
-      // Возвращаем базовый анализ дисбаланса
-      return { 
-        rightsImbalance: [
-          {
-            id: "default_imbalance_1",
-            type: "termination_rights",
-            description: "Обнаружен потенциальный дисбаланс в правах расторжения договора",
-            buyerRights: 1,
-            supplierRights: 2,
-            severity: "medium",
-            recommendation: "Необходим детальный анализ оснований для расторжения договора каждой стороной"
-          }
-        ]
-      };
-    }
+    const parsed = extractJsonFromResponse(rawResponse);
+    const rightsImbalance = parsed.rightsImbalance || [];
+    const overallConclusion = parsed.overallConclusion || "Анализ дисбаланса прав завершен.";
     
-    console.log(`📊 DEBUG findRightsImbalance: Парсю ответ...`);
-    const parsedResult = extractJsonFromResponse(rawResponse);
-    // Универсальная обработка: поддержка и объекта, и массива
-    let rightsImbalance = [];
-    if (Array.isArray(parsedResult)) {
-      rightsImbalance = parsedResult;
-    } else if (parsedResult && parsedResult.rightsImbalance) {
-      rightsImbalance = parsedResult.rightsImbalance;
-    }
-    
-    console.log(`🔍 DEBUG findRightsImbalance: Найдено дисбалансов прав: ${rightsImbalance.length}`);
-    console.log(`✅ ЗАВЕРШЕНИЕ функции findRightsImbalance: Анализ дисбаланса прав`);
-    return { rightsImbalance };
+    console.log(`✅ Шаг 5.2: Найдено дисбалансов: ${rightsImbalance.length}`);
+    return { rightsImbalance, overallConclusion };
     
   } catch (error) {
-    console.error("❌ DEBUG findRightsImbalance: Ошибка при анализе дисбаланса прав:", error);
+    console.error("❌ Ошибка анализа дисбаланса:", error);
     if (error instanceof Error && error.message.includes('429')) {
       keyPool.markKeyAsExhausted(keyToUse);
-      console.log("🔑 DEBUG findRightsImbalance: Ключ исчерпан при анализе дисбаланса прав");
     }
-    console.log(`❌ ОШИБКА в функции findRightsImbalance: Анализ дисбаланса прав`);
+    return { 
+      rightsImbalance: [], 
+      overallConclusion: "Анализ дисбаланса прав не удался из-за технической ошибки." 
+    };
+  }
+}
+
+// Функция анализа дисбаланса прав между сторонами (подход "Извлеки-и-пометь")
+async function findRightsImbalance(
+  allAnalysis: any[],
+  paragraphs: Array<{ id: string; text: string }>,
+  perspective: 'buyer' | 'supplier',
+  onProgress: (message: string) => void
+): Promise<any> {
+  console.log(`🔄 НАЧАЛО функции findRightsImbalance: Анализ дисбаланса прав методом "Извлеки-и-пометь"`);
+  
+  // Используем интеллектуальную приоритизацию
+  const rightsRelatedItems = getPrioritizedItemsForRightsAnalysis(allAnalysis, paragraphs, perspective);
+
+  if (rightsRelatedItems.length < 3) {
+    console.log("🔍 Недостаточно релевантных пунктов для анализа дисбаланса прав");
+    return { rightsImbalance: [], overallConclusion: "Недостаточно данных для анализа дисбаланса прав между сторонами." };
+  }
+
+  try {
+    // ШАГ 5.1: Классифицируем пункты по сторонам (новый подход "Извлеки-и-пометь")
+    console.log(`🔄 Запуск Шага 5.1: Классификация пунктов по сторонам`);
     
-    // Возвращаем fallback результат при ошибке
+    const CHUNK_SIZE = 5;
+    let classifiedClauses: any[] = [];
+
+    for (let i = 0; i < rightsRelatedItems.length; i += CHUNK_SIZE) {
+      const chunk = rightsRelatedItems.slice(i, i + CHUNK_SIZE);
+      console.log(`  -> Классифицируем чанк №${Math.floor(i / CHUNK_SIZE) + 1} (пункты ${i + 1}-${i + chunk.length})`);
+      
+      const classifications = await classifyClauseParty(chunk, perspective);
+      if (classifications.length > 0) {
+        classifiedClauses.push(...classifications);
+        console.log(`  ✅ Классифицировано ${classifications.length} пунктов в чанке №${Math.floor(i / CHUNK_SIZE) + 1}`);
+      } else {
+        console.warn(`  ⚠️ Чанк №${Math.floor(i / CHUNK_SIZE) + 1} не дал результатов классификации`);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    // ПРОГРАММНО СОЗДАЕМ СПИСКИ ПРАВ НА ОСНОВЕ КЛАССИФИКАЦИИ
+    const extractedRights = { buyerRightsList: [] as string[], supplierRightsList: [] as string[] };
+    
+    classifiedClauses.forEach(classified => {
+      const originalItem = rightsRelatedItems.find(item => item.id === classified.id);
+      if (originalItem) {
+        // Создаем краткое описание права на основе текста пункта
+        const summary = `${originalItem.text.substring(0, 80)}... (п. ${originalItem.id})`;
+        
+        if (classified.party === 'buyer') {
+          extractedRights.buyerRightsList.push(summary);
+        } else if (classified.party === 'supplier') {
+          extractedRights.supplierRightsList.push(summary);
+        }
+        // Пункты с party === 'both' или 'neutral' не добавляем в списки прав
+      }
+    });
+    
+    console.log(`✅ Шаг 5.1 ЗАВЕРШЕН: Всего классифицировано прав покупателя: ${extractedRights.buyerRightsList.length}, поставщика: ${extractedRights.supplierRightsList.length}`);
+    
+    if (extractedRights.buyerRightsList.length === 0 && extractedRights.supplierRightsList.length === 0) {
+      console.log("⚠️ Не удалось классифицировать права из пунктов договора");
+      return { 
+        rightsImbalance: [], 
+        overallConclusion: "Не удалось извлечь достаточно прав из договора для анализа дисбаланса." 
+      };
+    }
+
+    // ШАГ 5.2: Анализируем дисбаланс на основе извлеченных прав
+    console.log(`🔄 Запуск Шага 5.2: Анализ дисбаланса`);
+    const imbalanceResult = await analyzeRightsImbalance(extractedRights, perspective);
+    
+    console.log(`✅ ЗАВЕРШЕНИЕ функции findRightsImbalance: Анализ "Извлеки-и-пометь" завершен`);
+    return imbalanceResult;
+
+  } catch (error) {
+    console.error("❌ Критическая ошибка в анализе дисбаланса прав методом 'Извлеки-и-пометь':", error);
+    
+    // Возвращаем fallback результат при критической ошибке
     return { 
       rightsImbalance: [
         {
           id: "error_fallback_1",
           type: "control_rights", 
-          description: "Не удалось проанализировать дисбаланс прав из-за технической ошибки",
+          description: "Не удалось проанализировать дисбаланс прав из-за технической ошибки в методе 'Извлеки-и-пометь'",
           buyerRights: 0,
           supplierRights: 0,
           severity: "low",
           recommendation: "Необходимо провести ручной анализ распределения прав между сторонами"
         }
-      ]
+      ],
+      overallConclusion: "Анализ дисбаланса прав методом 'Извлеки-и-пометь' не удался из-за технической ошибки. Рекомендуется ручная проверка ключевых условий договора."
     };
   }
 }
@@ -1991,7 +2673,7 @@ export async function analyzeContractWithGemini(
   riskText: string,
   perspective: 'buyer' | 'supplier' = 'buyer',
   onProgress: (message: string) => void = () => {}
-): Promise<{ contractParagraphs: ContractParagraph[], missingRequirements: ContractParagraph[], ambiguousConditions: ContractParagraph[], structuralAnalysis: any, contradictions: any[], rightsImbalance: any[] }> {
+): Promise<{ contractParagraphs: ContractParagraph[], missingRequirements: ContractParagraph[], ambiguousConditions: ContractParagraph[], structuralAnalysis: any, contradictions: any[], rightsImbalance: any[], structuralDefects: any[] }> {
   console.log(`🚀 Начинаем многоэтапный анализ договора (${keyPool.getKeyCount()} API ключей)`);
   
   try {
@@ -2067,24 +2749,34 @@ export async function analyzeContractWithGemini(
     }
     
     // Этап 5: Анализ дисбаланса прав между сторонами
-    onProgress("Этап 5/7: Анализ дисбаланса прав сторон...");
-    console.log(`🔄 ГОТОВИМСЯ К ЭТАПУ 5: Анализ дисбаланса прав (анализов: ${allAnalysis.length}, абзацев: ${paragraphs.length})`);
-    console.log(`📊 DEBUG ЭТАП 5: Подготовка к анализу дисбаланса прав`);
+    onProgress("Этап 5/7: Агрегация и анализ дисбаланса прав...");
+    console.log(`🔄 НАЧИНАЕМ ЭТАП 5: Агрегация прав из ${chunkResults.length} чанков`);
     
     let rightsImbalanceResult;
     try {
-      console.log(`📊 DEBUG ЭТАП 5: Вызываю findRightsImbalance...`);
-      rightsImbalanceResult = await findRightsImbalance(allAnalysis, paragraphs, perspective, onProgress);
-      console.log(`📊 DEBUG ЭТАП 5: findRightsImbalance завершена, результат:`, rightsImbalanceResult);
+      // Вызов новой функции агрегации, которая работает без AI
+      rightsImbalanceResult = aggregateAndAnalyzeRights(chunkResults);
       console.log(`✅ ЭТАП 5 ЗАВЕРШЕН: Найдено дисбалансов прав: ${rightsImbalanceResult.rightsImbalance?.length || 0}`);
     } catch (error) {
       console.error("❌ КРИТИЧЕСКАЯ ОШИБКА В ЭТАПЕ 5:", error);
-      rightsImbalanceResult = { rightsImbalance: [] };
+      rightsImbalanceResult = { rightsImbalance: [], overallConclusion: "Ошибка при агрегации прав из чанков." };
     }
     
-    // Этап 6: Итоговый структурный анализ (с полным контекстом всех найденных проблем)
-    onProgress("Этап 6/7: Формирование итогового структурного анализа...");
-    console.log(`🔄 НАЧИНАЕМ ЭТАП 6: Итоговый структурный анализ`);
+    // Этап 6: Поиск структурных дефектов и опечаток
+    onProgress("Этап 6/8: Поиск структурных дефектов...");
+    console.log(`🔄 НАЧИНАЕМ ЭТАП 6: Поиск структурных дефектов`);
+    let structuralDefectsResult: any[] = [];
+    try {
+      structuralDefectsResult = await findStructuralDefects(paragraphs, perspective, onProgress);
+      console.log(`✅ ЭТАП 6 ЗАВЕРШЕН: Найдено структурных дефектов: ${structuralDefectsResult.length}`);
+    } catch (error) {
+      console.error("❌ ОШИБКА В ЭТАПЕ 6:", error);
+      structuralDefectsResult = [];
+    }
+    
+    // Этап 7: Итоговый структурный анализ (с полным контекстом всех найденных проблем)
+    onProgress("Этап 7/8: Формирование итогового структурного анализа...");
+    console.log(`🔄 НАЧИНАЕМ ЭТАП 7: Итоговый структурный анализ`);
     const structuralResult = await performFinalStructuralAnalysis(
       allAnalysis, 
       missingResult.missingRequirements || [],
@@ -2093,12 +2785,12 @@ export async function analyzeContractWithGemini(
       perspective, 
       onProgress
     );
-    console.log(`✅ ЭТАП 6 ЗАВЕРШЕН: Итоговый структурный анализ`);
+    console.log(`✅ ЭТАП 7 ЗАВЕРШЕН: Итоговый структурный анализ`);
     
-    console.log(`🔄 ПЕРЕХОДИМ К ЭТАПУ 7: Финализация результатов`);
+    console.log(`🔄 ПЕРЕХОДИМ К ЭТАПУ 8: Финализация результатов`);
     
-    // Этап 7: Финализация результатов
-    onProgress("Этап 7/7: Финализация результатов...");
+    // Этап 8: Финализация результатов
+    onProgress("Этап 8/8: Финализация результатов...");
     
     const contractParagraphs: ContractParagraph[] = paragraphs.map(paragraph => {
       const analysis = allAnalysis.find((item: any) => item.id === paragraph.id);
@@ -2166,7 +2858,8 @@ export async function analyzeContractWithGemini(
       ambiguousConditions,
       structuralAnalysis: finalStructuralAnalysis,
       contradictions: contradictionsResult.contradictions || [],
-      rightsImbalance: rightsImbalanceResult.rightsImbalance || []
+      rightsImbalance: rightsImbalanceResult.rightsImbalance || [],
+      structuralDefects: structuralDefectsResult || []
     };
   } catch (error) {
     console.error("❌ Ошибка при анализе договора:", error);

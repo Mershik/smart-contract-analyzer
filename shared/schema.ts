@@ -79,12 +79,23 @@ export interface Contradiction {
 // Новый тип для дисбаланса прав
 export interface RightsImbalance {
   id: string;
-  type: 'termination_rights' | 'suspension_rights' | 'modification_rights' | 'refusal_rights' | 'control_rights';
+  type: 'termination' | 'modification' | 'liability' | 'control' | 'procedural' | 'weighted_analysis' | 'general_rights';
   description: string;
   buyerRights: number;
   supplierRights: number;
   severity: 'high' | 'medium' | 'low';
   recommendation: string;
+  // Добавляем детали по конкретным пунктам
+  buyerRightsClauses?: Array<{
+    id: string;
+    text: string;
+    summary?: string;
+  }>;
+  supplierRightsClauses?: Array<{
+    id: string;
+    text: string;
+    summary?: string;
+  }>;
 }
 
 export interface StructuralAnalysis {
