@@ -92,6 +92,15 @@ function getProgressFromMessage(message: string): number {
             return 10 + (messagePercent / 100) * 40;
           }
         }
+        // Для этапа 5 (дисбаланс прав) — поддержка процентов
+        if (stage.id === 'imbalance') {
+          const percentMatch = message.match(/(\d+)%\s+завершено/);
+          if (percentMatch) {
+            const messagePercent = parseInt(percentMatch[1]);
+            // Масштабируем от 75% до 85%
+            return 75 + (messagePercent / 100) * 10;
+          }
+        }
         // Для остальных этапов — возвращаем начало диапазона
         return stage.progressRange[0];
       }

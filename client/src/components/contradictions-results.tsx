@@ -1,5 +1,6 @@
 import { AlertTriangle, Clock, DollarSign, Hash, Scale } from "lucide-react";
 import type { Contradiction } from "@shared/schema";
+import { useState } from "react";
 
 interface ContradictionsResultsProps {
   contradictions: Contradiction[];
@@ -78,6 +79,17 @@ export function ContradictionsResults({ contradictions, showContradictions }: Co
     }
   };
 
+  const [expanded, setExpanded] = useState<{ [id: string]: { p1: boolean; p2: boolean } }>({});
+  const toggle = (id: string, which: 'p1' | 'p2') => {
+    setExpanded(prev => ({
+      ...prev,
+      [id]: {
+        p1: which === 'p1' ? !prev[id]?.p1 : !!prev[id]?.p1,
+        p2: which === 'p2' ? !prev[id]?.p2 : !!prev[id]?.p2,
+      }
+    }));
+  };
+
   return (
     <div className="bg-white p-6 rounded-lg shadow border">
       <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -108,17 +120,40 @@ export function ContradictionsResults({ contradictions, showContradictions }: Co
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                {/* Первый пункт */}
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <h6 className="font-medium text-red-900 mb-2">Первый пункт:</h6>
-                  <p className="text-sm text-red-800 mb-2">{contradiction.conflictingParagraphs.paragraph1.text}</p>
+                  <p
+                    className={`text-sm text-red-800 mb-2 select-text transition-colors ${contradiction.conflictingParagraphs.paragraph1.text.length > 100 ? 'cursor-pointer hover:bg-red-100' : ''}`}
+                    onClick={() => toggle(contradiction.id, 'p1')}
+                    style={{ whiteSpace: 'pre-line' }}
+                  >
+                    {expanded[contradiction.id]?.p1
+                      ? contradiction.conflictingParagraphs.paragraph1.text
+                      : (contradiction.conflictingParagraphs.paragraph1.text.length > 100
+                        ? `${contradiction.conflictingParagraphs.paragraph1.text.substring(0, 100)}...`
+                        : contradiction.conflictingParagraphs.paragraph1.text)
+                    }
+                  </p>
                   <div className="bg-red-100 rounded px-2 py-1">
                     <span className="text-xs font-medium text-red-900">Значение: {contradiction.conflictingParagraphs.paragraph1.value}</span>
                   </div>
                 </div>
-
+                {/* Второй пункт */}
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <h6 className="font-medium text-red-900 mb-2">Второй пункт:</h6>
-                  <p className="text-sm text-red-800 mb-2">{contradiction.conflictingParagraphs.paragraph2.text}</p>
+                  <p
+                    className={`text-sm text-red-800 mb-2 select-text transition-colors ${contradiction.conflictingParagraphs.paragraph2.text.length > 100 ? 'cursor-pointer hover:bg-red-100' : ''}`}
+                    onClick={() => toggle(contradiction.id, 'p2')}
+                    style={{ whiteSpace: 'pre-line' }}
+                  >
+                    {expanded[contradiction.id]?.p2
+                      ? contradiction.conflictingParagraphs.paragraph2.text
+                      : (contradiction.conflictingParagraphs.paragraph2.text.length > 100
+                        ? `${contradiction.conflictingParagraphs.paragraph2.text.substring(0, 100)}...`
+                        : contradiction.conflictingParagraphs.paragraph2.text)
+                    }
+                  </p>
                   <div className="bg-red-100 rounded px-2 py-1">
                     <span className="text-xs font-medium text-red-900">Значение: {contradiction.conflictingParagraphs.paragraph2.value}</span>
                   </div>

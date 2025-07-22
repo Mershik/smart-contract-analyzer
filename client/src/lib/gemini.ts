@@ -373,7 +373,9 @@ function createChunksWithTokens(
     const overlapTokens = previousChunkSentences.length > 0 ? 
       countTokens(createOverlapText(previousChunkSentences)) : 0;
     
-    if (currentTokenCount + paragraphTokens + overlapTokens > maxTokensPerChunk && currentChunk.length > 0) {
+    // --- ДОБАВЛЕНО: ограничение по количеству абзацев ---
+    const maxParagraphsPerChunk = 6;
+    if ((currentTokenCount + paragraphTokens + overlapTokens > maxTokensPerChunk || currentChunk.length >= maxParagraphsPerChunk) && currentChunk.length > 0) {
       // Сохраняем последние предложения для следующего чанка
       const lastParagraphText = currentChunk[currentChunk.length - 1]?.text || '';
       previousChunkSentences = getLastSentences(lastParagraphText, overlapSentences);
@@ -2557,26 +2559,21 @@ async function findRightsImbalance(
   onProgress: (message: string) => void
 ): Promise<any> {
   console.log(`🔄 НАЧАЛО функции findRightsImbalance: Анализ дисбаланса прав методом "Извлеки-и-пометь"`);
-  
   // Используем интеллектуальную приоритизацию
   const rightsRelatedItems = getPrioritizedItemsForRightsAnalysis(allAnalysis, paragraphs, perspective);
-
   if (rightsRelatedItems.length < 3) {
     console.log("🔍 Недостаточно релевантных пунктов для анализа дисбаланса прав");
     return { rightsImbalance: [], overallConclusion: "Недостаточно данных для анализа дисбаланса прав между сторонами." };
   }
-
   try {
     // ШАГ 5.1: Классифицируем пункты по сторонам (новый подход "Извлеки-и-пометь")
     console.log(`🔄 Запуск Шага 5.1: Классификация пунктов по сторонам`);
-    
     const CHUNK_SIZE = 5;
     let classifiedClauses: any[] = [];
-
+    const totalChunks = Math.ceil(rightsRelatedItems.length / CHUNK_SIZE);
     for (let i = 0; i < rightsRelatedItems.length; i += CHUNK_SIZE) {
       const chunk = rightsRelatedItems.slice(i, i + CHUNK_SIZE);
       console.log(`  -> Классифицируем чанк №${Math.floor(i / CHUNK_SIZE) + 1} (пункты ${i + 1}-${i + chunk.length})`);
-      
       const classifications = await classifyClauseParty(chunk, perspective);
       if (classifications.length > 0) {
         classifiedClauses.push(...classifications);
@@ -2584,30 +2581,25 @@ async function findRightsImbalance(
       } else {
         console.warn(`  ⚠️ Чанк №${Math.floor(i / CHUNK_SIZE) + 1} не дал результатов классификации`);
       }
-      
       await new Promise(resolve => setTimeout(resolve, 1000));
+      // --- Прогресс для этапа 5 ---
+      const percent = Math.round(((i + CHUNK_SIZE) / rightsRelatedItems.length) * 100);
+      onProgress(`Этап 5/7: Анализ дисбаланса прав... ${Math.min(percent, 100)}% завершено`);
     }
-
     // ПРОГРАММНО СОЗДАЕМ СПИСКИ ПРАВ НА ОСНОВЕ КЛАССИФИКАЦИИ
     const extractedRights = { buyerRightsList: [] as string[], supplierRightsList: [] as string[] };
-    
     classifiedClauses.forEach(classified => {
       const originalItem = rightsRelatedItems.find(item => item.id === classified.id);
       if (originalItem) {
-        // Создаем краткое описание права на основе текста пункта
         const summary = `${originalItem.text.substring(0, 80)}...`;
-        
         if (classified.party === 'buyer') {
           extractedRights.buyerRightsList.push(summary);
         } else if (classified.party === 'supplier') {
           extractedRights.supplierRightsList.push(summary);
         }
-        // Пункты с party === 'both' или 'neutral' не добавляем в списки прав
       }
     });
-    
     console.log(`✅ Шаг 5.1 ЗАВЕРШЕН: Всего классифицировано прав покупателя: ${extractedRights.buyerRightsList.length}, поставщика: ${extractedRights.supplierRightsList.length}`);
-    
     if (extractedRights.buyerRightsList.length === 0 && extractedRights.supplierRightsList.length === 0) {
       console.log("⚠️ Не удалось классифицировать права из пунктов договора");
       return { 
@@ -2615,18 +2607,14 @@ async function findRightsImbalance(
         overallConclusion: "Не удалось извлечь достаточно прав из договора для анализа дисбаланса." 
       };
     }
-
     // ШАГ 5.2: Анализируем дисбаланс на основе извлеченных прав
     console.log(`🔄 Запуск Шага 5.2: Анализ дисбаланса`);
+    onProgress(`Этап 5/7: Анализ дисбаланса прав... 100% завершено`);
     const imbalanceResult = await analyzeRightsImbalance(extractedRights, perspective);
-    
     console.log(`✅ ЗАВЕРШЕНИЕ функции findRightsImbalance: Анализ "Извлеки-и-пометь" завершен`);
     return imbalanceResult;
-
   } catch (error) {
     console.error("❌ Критическая ошибка в анализе дисбаланса прав методом 'Извлеки-и-пометь':", error);
-    
-    // Возвращаем fallback результат при критической ошибке
     return { 
       rightsImbalance: [
         {
