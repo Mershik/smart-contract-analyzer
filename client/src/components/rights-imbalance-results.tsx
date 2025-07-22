@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Scale, AlertTriangle, CheckCircle, Users, Copy, ChevronDown, ChevronUp, Gavel, Settings, Shield, Eye, FileText } from "lucide-react";
+import { Scale, AlertTriangle, CheckCircle, Users, Gavel, Settings, Shield, Eye, FileText, FileIcon } from "lucide-react";
 import { useState } from "react";
 import type { RightsImbalance } from "@shared/schema";
 
@@ -10,8 +10,7 @@ interface RightsImbalanceResultsProps {
 }
 
 export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResultsProps) {
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [expandedClauses, setExpandedClauses] = useState<Set<string>>(new Set());
 
   if (rightsImbalance.length === 0) {
     return (
@@ -41,15 +40,6 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
     }
   };
 
-  const getSeverityIndicator = (severity: string) => {
-    switch (severity) {
-      case 'high': return '🔴';
-      case 'medium': return '🟡';
-      case 'low': return '🟢';
-      default: return '⚪';
-    }
-  };
-
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'termination': return <Gavel className="h-5 w-5" />;
@@ -75,36 +65,14 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
     }
   };
 
-  const toggleGroup = (groupId: string) => {
-    const newExpanded = new Set(expandedGroups);
-    if (newExpanded.has(groupId)) {
-      newExpanded.delete(groupId);
+  const toggleClause = (clauseId: string) => {
+    const newExpanded = new Set(expandedClauses);
+    if (newExpanded.has(clauseId)) {
+      newExpanded.delete(clauseId);
     } else {
-      newExpanded.add(groupId);
+      newExpanded.add(clauseId);
     }
-    setExpandedGroups(newExpanded);
-  };
-
-  const copyToClipboard = async (text: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedText(label);
-      setTimeout(() => setCopiedText(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy text: ', err);
-    }
-  };
-
-  const formatClausesForCopy = (clauses: Array<{id: string; text: string; summary?: string}>, party: string) => {
-    return clauses.map((clause, index) => 
-      `${index + 1}. п.${clause.id}: ${clause.summary || clause.text.substring(0, 100)}...`
-    ).join('\n');
-  };
-
-  const calculateRatio = (buyerRights: number, supplierRights: number) => {
-    const max = Math.max(buyerRights, supplierRights);
-    const min = Math.max(Math.min(buyerRights, supplierRights), 1);
-    return (max / min).toFixed(1);
+    setExpandedClauses(newExpanded);
   };
 
   // Группируем дисбалансы по типам
@@ -147,8 +115,7 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
         {/* Группированные дисбалансы */}
         <div className="space-y-3">
           {Object.entries(groupedImbalances).map(([type, imbalances]) => {
-            const mainImbalance = imbalances[0]; // Берем первый элемент как основной
-            const isExpanded = expandedGroups.has(type);
+            const mainImbalance = imbalances[0];
             const hasDetails = mainImbalance.buyerRightsClauses || mainImbalance.supplierRightsClauses;
             
             return (
@@ -164,43 +131,19 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-lg">{getTypeName(type)}</span>
-                          <span className="text-xl">{getSeverityIndicator(mainImbalance.severity)}</span>
                           <Badge className={getSeverityColor(mainImbalance.severity)}>
                             {mainImbalance.severity === 'high' && 'КРИТИЧНО'}
                             {mainImbalance.severity === 'medium' && 'Средний'}
                             {mainImbalance.severity === 'low' && 'Низкий'}
                           </Badge>
                         </div>
-                        <div className="text-sm text-gray-600 mt-1">
-                          Соотношение: {mainImbalance.buyerRights}:{mainImbalance.supplierRights}
-                          {mainImbalance.buyerRights !== mainImbalance.supplierRights && (
-                            <span className="ml-2 text-amber-600">
-                              (в {calculateRatio(mainImbalance.buyerRights, mainImbalance.supplierRights)} раза больше у {mainImbalance.buyerRights > mainImbalance.supplierRights ? 'покупателя' : 'поставщика'})
-                            </span>
-                          )}
-                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {hasDetails && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleGroup(type)}
-                          className="flex items-center gap-1"
-                        >
-                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                          {isExpanded ? 'Скрыть' : 'Детали'}
-                        </Button>
-                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Основная информация */}
                 <div className="p-4">
-                  <p className="text-gray-700 mb-3">{mainImbalance.description}</p>
-                  
                   {/* Сравнение прав */}
                   <div className="grid grid-cols-2 gap-4 mb-3 text-sm">
                     <div className="flex items-center gap-2">
@@ -232,38 +175,37 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                 </div>
 
                 {/* Детализированная информация */}
-                {isExpanded && hasDetails && (
+                {hasDetails && (
                   <div className="border-t bg-gray-50 p-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Права покупателя */}
                       {mainImbalance.buyerRightsClauses && mainImbalance.buyerRightsClauses.length > 0 && (
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-medium text-blue-700 flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              Права Покупателя ({mainImbalance.buyerRightsClauses.length})
-                            </h4>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => copyToClipboard(
-                                formatClausesForCopy(mainImbalance.buyerRightsClauses!, 'Покупатель'),
-                                `buyer-${type}`
-                              )}
-                              className="flex items-center gap-1 text-xs"
-                            >
-                              <Copy className="h-3 w-3" />
-                              {copiedText === `buyer-${type}` ? 'Скопировано!' : 'Копировать'}
-                            </Button>
-                          </div>
-                          <div className="space-y-1 max-h-40 overflow-y-auto">
-                            {mainImbalance.buyerRightsClauses.map((clause, index) => (
-                              <div key={clause.id} className="text-sm bg-blue-50 p-2 rounded border-l-2 border-blue-300">
-                                <span className="font-medium text-blue-800">п.{clause.id}:</span>
-                                <span className="ml-2 text-blue-700">
-                                  {clause.summary || clause.text.substring(0, 150)}
-                                  {clause.text.length > 150 && '...'}
-                                </span>
+                          <h4 className="font-medium text-blue-700 flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            Права Покупателя ({mainImbalance.buyerRightsClauses.length})
+                          </h4>
+                          <div className="space-y-1">
+                            {mainImbalance.buyerRightsClauses.map((clause) => (
+                              <div
+                                key={clause.id}
+                                className={
+                                  `text-sm bg-blue-50 p-2 rounded border-l-2 border-blue-300 transition-colors` +
+                                  (clause.text.length > 100 ? ' cursor-pointer hover:bg-blue-100' : '')
+                                }
+                                onClick={() => clause.text.length > 100 && toggleClause(`buyer-${clause.id}`)}
+                              >
+                                <div className="flex items-start gap-2">
+                                  {/* <Button ...> <FileIcon /> </Button> убрано */}
+                                  <div className="flex-1">
+                                    <span className="text-blue-700 select-text">
+                                      {expandedClauses.has(`buyer-${clause.id}`) && clause.text.length > 100
+                                        ? clause.text
+                                        : (clause.text.length > 100 ? `${clause.text.substring(0, 100)}...` : clause.text)
+                                      }
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -273,59 +215,37 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                       {/* Права поставщика */}
                       {mainImbalance.supplierRightsClauses && mainImbalance.supplierRightsClauses.length > 0 && (
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-medium text-green-700 flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              Права Поставщика ({mainImbalance.supplierRightsClauses.length})
-                            </h4>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => copyToClipboard(
-                                formatClausesForCopy(mainImbalance.supplierRightsClauses!, 'Поставщик'),
-                                `supplier-${type}`
-                              )}
-                              className="flex items-center gap-1 text-xs"
-                            >
-                              <Copy className="h-3 w-3" />
-                              {copiedText === `supplier-${type}` ? 'Скопировано!' : 'Копировать'}
-                            </Button>
-                          </div>
-                          <div className="space-y-1 max-h-40 overflow-y-auto">
-                            {mainImbalance.supplierRightsClauses.map((clause, index) => (
-                              <div key={clause.id} className="text-sm bg-green-50 p-2 rounded border-l-2 border-green-300">
-                                <span className="font-medium text-green-800">п.{clause.id}:</span>
-                                <span className="ml-2 text-green-700">
-                                  {clause.summary || clause.text.substring(0, 150)}
-                                  {clause.text.length > 150 && '...'}
-                                </span>
+                          <h4 className="font-medium text-green-700 flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            Права Поставщика ({mainImbalance.supplierRightsClauses.length})
+                          </h4>
+                          <div className="space-y-1">
+                            {mainImbalance.supplierRightsClauses.map((clause) => (
+                              <div
+                                key={clause.id}
+                                className={
+                                  `text-sm bg-green-50 p-2 rounded border-l-2 border-green-300 transition-colors` +
+                                  (clause.text.length > 100 ? ' cursor-pointer hover:bg-green-100' : '')
+                                }
+                                onClick={() => clause.text.length > 100 && toggleClause(`supplier-${clause.id}`)}
+                              >
+                                <div className="flex items-start gap-2">
+                                  {/* <Button ...> <FileIcon /> </Button> убрано */}
+                                  <div className="flex-1">
+                                    <span className="text-green-700 select-text">
+                                      {expandedClauses.has(`supplier-${clause.id}`) && clause.text.length > 100
+                                        ? clause.text
+                                        : (clause.text.length > 100 ? `${clause.text.substring(0, 100)}...` : clause.text)
+                                      }
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
                     </div>
-
-                    {/* Кнопка копирования всех пунктов */}
-                    {hasDetails && (
-                      <div className="mt-4 pt-3 border-t">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            const buyerText = mainImbalance.buyerRightsClauses ? 
-                              `ПРАВА ПОКУПАТЕЛЯ:\n${formatClausesForCopy(mainImbalance.buyerRightsClauses, 'Покупатель')}` : '';
-                            const supplierText = mainImbalance.supplierRightsClauses ? 
-                              `ПРАВА ПОСТАВЩИКА:\n${formatClausesForCopy(mainImbalance.supplierRightsClauses, 'Поставщик')}` : '';
-                            const fullText = `=== ${getTypeName(type).toUpperCase()} ===\n\n${buyerText}\n\n${supplierText}\n\nРЕКОМЕНДАЦИЯ: ${mainImbalance.recommendation}`;
-                            copyToClipboard(fullText, `all-${type}`);
-                          }}
-                          className="flex items-center gap-2"
-                        >
-                          <Copy className="h-4 w-4" />
-                          {copiedText === `all-${type}` ? 'Скопировано!' : 'Копировать все пункты категории'}
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
