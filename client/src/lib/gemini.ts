@@ -1618,19 +1618,19 @@ async function findContradictions(
 ): Promise<any> {
   // onProgress уже вызван в основной функции
   
-  // Подготавливаем краткие выводы по каждому проанализированному пункту
+  // Подготавливаем данные по каждому проанализированному пункту с полными текстами
   const analyzedSummary = allAnalysis
     .filter(item => item.category && item.category !== null)
     .map(item => {
       const paragraph = paragraphs.find(p => p.id === item.id);
       return {
         id: item.id,
-        text: paragraph?.text?.substring(0, 100) + ((paragraph?.text && paragraph.text.length > 100) ? '...' : ''), // Сокращаем текст
+        text: paragraph?.text || '', // Сохраняем полный текст для точного анализа противоречий
         category: item.category,
-        comment: item.comment?.substring(0, 100) || null // Сокращаем комментарии
+        comment: item.comment?.substring(0, 150) || null // Немного увеличиваем лимит комментариев
       };
     })
-    .slice(0, 30); // Ограничиваем количество пунктов для анализа
+    .slice(0, 25); // Немного уменьшаем количество пунктов из-за увеличенного размера
 
   // Если анализированных пунктов мало, не ищем противоречия
   if (analyzedSummary.length < 3) {
@@ -1668,25 +1668,27 @@ ${JSON.stringify(analyzedSummary, null, 2)}
 
 Если противоречий нет, верни пустой массив. Если есть - укажи до 7 самых критичных.
 
+ВАЖНО: В поле "text" для каждого пункта верни ПОЛНЫЙ текст пункта договора, а не сокращенную версию. Это критически важно для пользователя.
+
 Верни JSON:
 {
   "contradictions": [
     {
       "id": "contr_1",
       "type": "temporal",
-      "description": "Краткое описание противоречия (до 100 символов)",
+      "description": "Краткое описание противоречия (до 150 символов)",
       "conflictingParagraphs": {
         "paragraph1": {
-          "text": "Первый пункт (до 80 символов)",
+          "text": "ПОЛНЫЙ текст первого пункта договора без сокращений",
           "value": "Значение 1"
         },
         "paragraph2": {
-          "text": "Второй пункт (до 80 символов)", 
+          "text": "ПОЛНЫЙ текст второго пункта договора без сокращений", 
           "value": "Значение 2"
         }
       },
       "severity": "high",
-      "recommendation": "Краткая рекомендация (до 80 символов)"
+      "recommendation": "Краткая рекомендация (до 120 символов)"
     }
   ]
 }
