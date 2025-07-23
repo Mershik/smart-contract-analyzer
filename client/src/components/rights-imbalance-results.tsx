@@ -14,7 +14,7 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
 
   if (rightsImbalance.length === 0) {
     return (
-      <Card>
+      <Card className="mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Scale className="h-5 w-5 text-green-600" />
@@ -89,29 +89,14 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
   const totalSupplierRights = rightsImbalance.reduce((sum, item) => sum + item.supplierRights, 0);
 
   return (
-    <Card>
+    <Card className="mb-6">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Scale className="h-5 w-5 text-amber-600" />
-          Дисбаланс прав сторон
-          <Badge variant="outline" className="ml-auto">
-            {rightsImbalance.length} дисбаланс{rightsImbalance.length > 1 ? 'ов' : ''}
-          </Badge>
+          Дисбаланс прав сторон ({rightsImbalance.length})
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Общая статистика */}
-        <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-blue-600">{totalBuyerRights}</div>
-            <div className="text-sm text-gray-600">Права Покупателя</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-green-600">{totalSupplierRights}</div>
-            <div className="text-sm text-gray-600">Права Поставщика</div>
-          </div>
-        </div>
-
         {/* Группированные дисбалансы */}
         <div className="space-y-3">
           {Object.entries(groupedImbalances).map(([type, imbalances]) => {
@@ -146,23 +131,15 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
 
                 {/* Основная информация */}
                 <div className="p-4">
-                  {/* Сравнение прав */}
-                  <div className="grid grid-cols-2 gap-4 mb-3 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-blue-500" />
-                      <span>Покупатель: </span>
-                      <Badge variant="outline" className="text-blue-600">
-                        {mainImbalance.buyerRights}
-                      </Badge>
+                  
+                  {/* Описание дисбаланса */}
+                  {mainImbalance.description && (
+                    <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded">
+                      <div className="text-sm text-amber-800">
+                        {mainImbalance.description}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-green-500" />
-                      <span>Поставщик: </span>
-                      <Badge variant="outline" className="text-green-600">
-                        {mainImbalance.supplierRights}
-                      </Badge>
-                    </div>
-                  </div>
+                  )}
                   
                   {/* Рекомендация */}
                   <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded">
@@ -258,19 +235,6 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
           })}
         </div>
 
-        {/* Общая рекомендация */}
-        {rightsImbalance.length > 0 && (
-          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <Scale className="h-5 w-5 text-amber-600 mt-0.5" />
-              <div className="text-sm text-amber-800">
-                <span className="font-medium">Общая рекомендация: </span>
-                Рассмотрите возможность более равномерного распределения прав между сторонами. 
-                Значительный дисбаланс может создавать правовые риски и повышать вероятность споров.
-              </div>
-            </div>
-          </div>
-        )}
       </CardContent>
     </Card>
   );

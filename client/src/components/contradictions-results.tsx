@@ -1,6 +1,7 @@
 import { AlertTriangle, Clock, DollarSign, Hash, Scale } from "lucide-react";
 import type { Contradiction } from "@shared/schema";
 import { useState } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 interface ContradictionsResultsProps {
   contradictions: Contradiction[];
@@ -11,15 +12,19 @@ export function ContradictionsResults({ contradictions, showContradictions }: Co
   // Всегда рендерим компонент для корректной навигации
   if (!showContradictions) {
     return (
-      <div className="bg-white p-6 rounded-lg shadow border">
-        <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-          <AlertTriangle className="w-5 h-5 mr-2 text-gray-400" />
-          Выявленные противоречия (скрыто)
-        </h4>
-        <div className="text-center py-8 text-gray-500">
-          <p>Фильтр противоречий отключен</p>
-        </div>
-      </div>
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold text-gray-900 flex items-center">
+            <AlertTriangle className="w-5 h-5 mr-2 text-gray-400" />
+            Выявленные противоречия (скрыто)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-gray-500">
+            <p>Фильтр противоречий отключен</p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -91,83 +96,86 @@ export function ContradictionsResults({ contradictions, showContradictions }: Co
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow border">
-      <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-        <AlertTriangle className="w-5 h-5 mr-2 text-red-500" />
-        Выявленные противоречия ({contradictions.length})
-      </h4>
-      
-      {contradictions.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-          <p>Противоречий не обнаружено</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {contradictions.map((contradiction) => (
-            <div key={contradiction.id} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center">
-                  {getTypeIcon(contradiction.type)}
-                  <div className="ml-3">
-                    <h5 className="font-medium text-gray-900">{getTypeLabel(contradiction.type)}</h5>
-                    <p className="text-sm text-gray-600">{contradiction.description}</p>
+    <Card className="mb-6">
+      <CardHeader>
+        <CardTitle className="text-lg font-semibold text-gray-900 flex items-center">
+          <AlertTriangle className="w-5 h-5 mr-2 text-red-500" />
+          Выявленные противоречия ({contradictions.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {contradictions.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <p>Противоречий не обнаружено</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {contradictions.map((contradiction) => (
+              <div key={contradiction.id} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center">
+                    {getTypeIcon(contradiction.type)}
+                    <div className="ml-3">
+                      <h5 className="font-medium text-gray-900">{getTypeLabel(contradiction.type)}</h5>
+                      <p className="text-sm text-gray-600">{contradiction.description}</p>
+                    </div>
                   </div>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${getSeverityColor(contradiction.severity)}`}>
+                    {getSeverityLabel(contradiction.severity)}
+                  </span>
                 </div>
-                <span className={`px-2 py-1 rounded text-xs font-medium ${getSeverityColor(contradiction.severity)}`}>
-                  {getSeverityLabel(contradiction.severity)}
-                </span>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                {/* Первый пункт */}
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <h6 className="font-medium text-red-900 mb-2">Первый пункт:</h6>
-                  <p
-                    className={`text-sm text-red-800 mb-2 select-text transition-colors ${contradiction.conflictingParagraphs.paragraph1.text.length > 100 ? 'cursor-pointer hover:bg-red-100' : ''}`}
-                    onClick={() => toggle(contradiction.id, 'p1')}
-                    style={{ whiteSpace: 'pre-line' }}
-                  >
-                    {expanded[contradiction.id]?.p1
-                      ? contradiction.conflictingParagraphs.paragraph1.text
-                      : (contradiction.conflictingParagraphs.paragraph1.text.length > 100
-                        ? `${contradiction.conflictingParagraphs.paragraph1.text.substring(0, 100)}...`
-                        : contradiction.conflictingParagraphs.paragraph1.text)
-                    }
-                  </p>
-                  <div className="bg-red-100 rounded px-2 py-1">
-                    <span className="text-xs font-medium text-red-900">Значение: {contradiction.conflictingParagraphs.paragraph1.value}</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  {/* Первый пункт */}
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <h6 className="font-medium text-red-900 mb-2">Первый пункт:</h6>
+                    <p
+                      className={`text-sm text-red-800 mb-2 select-text transition-colors ${contradiction.conflictingParagraphs.paragraph1.text.length > 100 ? 'cursor-pointer hover:bg-red-100' : ''}`}
+                      onClick={() => toggle(contradiction.id, 'p1')}
+                      style={{ whiteSpace: 'pre-line' }}
+                    >
+                      {expanded[contradiction.id]?.p1
+                        ? contradiction.conflictingParagraphs.paragraph1.text
+                        : (contradiction.conflictingParagraphs.paragraph1.text.length > 100
+                          ? `${contradiction.conflictingParagraphs.paragraph1.text.substring(0, 100)}...`
+                          : contradiction.conflictingParagraphs.paragraph1.text)
+                      }
+                    </p>
+                    <div className="bg-red-100 rounded px-2 py-1">
+                      <span className="text-xs font-medium text-red-900">Значение: {contradiction.conflictingParagraphs.paragraph1.value}</span>
+                    </div>
+                  </div>
+                  {/* Второй пункт */}
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <h6 className="font-medium text-red-900 mb-2">Второй пункт:</h6>
+                    <p
+                      className={`text-sm text-red-800 mb-2 select-text transition-colors ${contradiction.conflictingParagraphs.paragraph2.text.length > 100 ? 'cursor-pointer hover:bg-red-100' : ''}`}
+                      onClick={() => toggle(contradiction.id, 'p2')}
+                      style={{ whiteSpace: 'pre-line' }}
+                    >
+                      {expanded[contradiction.id]?.p2
+                        ? contradiction.conflictingParagraphs.paragraph2.text
+                        : (contradiction.conflictingParagraphs.paragraph2.text.length > 100
+                          ? `${contradiction.conflictingParagraphs.paragraph2.text.substring(0, 100)}...`
+                          : contradiction.conflictingParagraphs.paragraph2.text)
+                      }
+                    </p>
+                    <div className="bg-red-100 rounded px-2 py-1">
+                      <span className="text-xs font-medium text-red-900">Значение: {contradiction.conflictingParagraphs.paragraph2.value}</span>
+                    </div>
                   </div>
                 </div>
-                {/* Второй пункт */}
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <h6 className="font-medium text-red-900 mb-2">Второй пункт:</h6>
-                  <p
-                    className={`text-sm text-red-800 mb-2 select-text transition-colors ${contradiction.conflictingParagraphs.paragraph2.text.length > 100 ? 'cursor-pointer hover:bg-red-100' : ''}`}
-                    onClick={() => toggle(contradiction.id, 'p2')}
-                    style={{ whiteSpace: 'pre-line' }}
-                  >
-                    {expanded[contradiction.id]?.p2
-                      ? contradiction.conflictingParagraphs.paragraph2.text
-                      : (contradiction.conflictingParagraphs.paragraph2.text.length > 100
-                        ? `${contradiction.conflictingParagraphs.paragraph2.text.substring(0, 100)}...`
-                        : contradiction.conflictingParagraphs.paragraph2.text)
-                    }
-                  </p>
-                  <div className="bg-red-100 rounded px-2 py-1">
-                    <span className="text-xs font-medium text-red-900">Значение: {contradiction.conflictingParagraphs.paragraph2.value}</span>
-                  </div>
-                </div>
-              </div>
 
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                <h6 className="font-medium text-orange-900 mb-2">Рекомендация:</h6>
-                <p className="text-sm text-orange-800">{contradiction.recommendation}</p>
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                  <h6 className="font-medium text-orange-900 mb-2">Рекомендация:</h6>
+                  <p className="text-sm text-orange-800">{contradiction.recommendation}</p>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 } 
