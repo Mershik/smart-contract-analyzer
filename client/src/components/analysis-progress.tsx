@@ -47,7 +47,7 @@ const ANALYSIS_STAGES = [
     label: 'Анализ дисбаланса прав',
     description: 'Анализ дисбаланса прав сторон',
     icon: Zap,
-    keywords: ['Этап 5/7', 'дисбаланса прав'],
+    keywords: ['Этап 5/7', 'дисбаланса прав', 'Агрегация и анализ дисбаланса прав'],
     progressRange: [75, 85]
   },
   {
@@ -91,6 +91,8 @@ function getProgressFromMessage(message: string): number {
             // Масштабируем от 10% до 50%
             return 10 + (messagePercent / 100) * 40;
           }
+          // Если этап определён, но процента нет — возвращаем минимум диапазона
+          return stage.progressRange[0];
         }
         // Для этапа 5 (дисбаланс прав) — поддержка процентов
         if (stage.id === 'imbalance') {
@@ -100,6 +102,8 @@ function getProgressFromMessage(message: string): number {
             // Масштабируем от 75% до 85%
             return 75 + (messagePercent / 100) * 10;
           }
+          // Если этап определён, но процента нет — возвращаем минимум диапазона
+          return stage.progressRange[0];
         }
         // Для остальных этапов — возвращаем начало диапазона
         return stage.progressRange[0];
