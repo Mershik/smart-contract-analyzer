@@ -1628,12 +1628,18 @@ async function findContradictions(
   allAnalysis: any[],
   paragraphs: Array<{ id: string; text: string }>,
   perspective: 'buyer' | 'supplier',
-  onProgress: (message: string) => void
+  onProgress: (message: string) => void,
+  retryCount: number = 0
 ): Promise<any> {
   // onProgress уже вызван в основной функции
   
+  // Константы для retry логики
+  const MAX_RETRIES = 3;
+  const RETRY_DELAYS = [2000, 5000, 10000]; // 2с, 5с, 10с
+  
   // Логирование входных данных
   console.log(`📊 ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ПОИСКА ПРОТИВОРЕЧИЙ:`);
+  console.log(`📊 Попытка ${retryCount + 1} из ${MAX_RETRIES + 1}`);
   console.log(`📊 Всего анализов получено: ${allAnalysis.length}`);
   console.log(`📊 Всего параграфов: ${paragraphs.length}`);
   console.log(`📊 Перспектива анализа: ${perspective}`);
@@ -1790,17 +1796,52 @@ ${JSON.stringify(analyzedSummary, null, 2)}
     console.error("❌ Сообщение ошибки:", error instanceof Error ? error.message : String(error));
     console.error("❌ Полная ошибка:", error);
     
+    let shouldRetry = false;
+    console.log(`🔍 DEBUG: retryCount = ${retryCount}, MAX_RETRIES = ${MAX_RETRIES}`);
+    
     if (error instanceof Error) {
       if (error.message.includes('429')) {
         keyPool.markKeyAsExhausted(keyToUse);
         console.log("🔑 Ключ исчерпан при поиске противоречий (429 ошибка)");
+        shouldRetry = true;
       } else if (error.message.includes('quota')) {
         console.log("💰 Превышена квота API");
+        shouldRetry = false; // Не ретраим при превышении квоты
       } else if (error.message.includes('token')) {
         console.log("🔢 Ошибка связана с токенами");
+        shouldRetry = false; // Не ретраим при ошибках токенов
+      } else if (error.message.includes('Load failed') || 
+                 error.message.includes('network') || 
+                 error.message.includes('fetch') ||
+                 error.message.includes('connection')) {
+        console.log("🌐 Сетевая ошибка обнаружена");
+        console.log(`🔍 DEBUG: Установлен shouldRetry = true для сетевой ошибки`);
+        shouldRetry = true;
+      } else {
+        console.log("🔄 Неизвестная ошибка, пробуем повторить");
+        console.log(`🔍 DEBUG: Установлен shouldRetry = true для неизвестной ошибки`);
+        shouldRetry = true;
       }
     }
     
+    console.log(`🔍 DEBUG: shouldRetry = ${shouldRetry}, условие retry: ${shouldRetry && retryCount < MAX_RETRIES}`);
+    
+    // Логика повторных попыток
+    if (shouldRetry && retryCount < MAX_RETRIES) {
+      const delay = RETRY_DELAYS[retryCount] || 10000;
+      console.log(`🔄 Повторная попытка через ${delay/1000} секунд (попытка ${retryCount + 2}/${MAX_RETRIES + 1})`);
+      
+      // Обновляем прогресс
+      onProgress(`Этап 4/7: Поиск противоречий... Повторная попытка ${retryCount + 2}/${MAX_RETRIES + 1}`);
+      
+      // Ждем перед повторной попыткой
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      // Рекурсивный вызов с увеличенным счетчиком
+      return await findContradictions(allAnalysis, paragraphs, perspective, onProgress, retryCount + 1);
+    }
+    
+    console.error(`❌ Все попытки исчерпаны (${retryCount + 1}/${MAX_RETRIES + 1}), возвращаем пустой результат`);
     return { contradictions: [] };
   }
 }
@@ -2657,9 +2698,15 @@ async function findRightsImbalance(
   allAnalysis: any[],
   paragraphs: Array<{ id: string; text: string }>,
   perspective: 'buyer' | 'supplier',
-  onProgress: (message: string) => void
+  onProgress: (message: string) => void,
+  retryCount: number = 0
 ): Promise<any> {
+  // Константы для retry логики
+  const MAX_RETRIES = 3;
+  const RETRY_DELAYS = [2000, 5000, 10000]; // 2с, 5с, 10с
+  
   console.log(`🔄 НАЧАЛО функции findRightsImbalance: Анализ дисбаланса прав методом "Извлеки-и-пометь"`);
+  console.log(`📊 Попытка ${retryCount + 1} из ${MAX_RETRIES + 1}`);
   // Используем интеллектуальную приоритизацию
   const rightsRelatedItems = getPrioritizedItemsForRightsAnalysis(allAnalysis, paragraphs, perspective);
   if (rightsRelatedItems.length < 3) {
@@ -2715,7 +2762,51 @@ async function findRightsImbalance(
     console.log(`✅ ЗАВЕРШЕНИЕ функции findRightsImbalance: Анализ "Извлеки-и-пометь" завершен`);
     return imbalanceResult;
   } catch (error) {
-    console.error("❌ Критическая ошибка в анализе дисбаланса прав методом 'Извлеки-и-пометь':", error);
+    console.error("❌ ДЕТАЛЬНАЯ ОШИБКА при анализе дисбаланса прав:");
+    console.error("❌ Тип ошибки:", error?.constructor?.name);
+    console.error("❌ Сообщение ошибки:", error instanceof Error ? error.message : String(error));
+    console.error("❌ Полная ошибка:", error);
+    
+    let shouldRetry = false;
+    
+    if (error instanceof Error) {
+      if (error.message.includes('429')) {
+        console.log("🔑 Ключ исчерпан при анализе дисбаланса прав (429 ошибка)");
+        shouldRetry = true;
+      } else if (error.message.includes('quota')) {
+        console.log("💰 Превышена квота API");
+        shouldRetry = false; // Не ретраим при превышении квоты
+      } else if (error.message.includes('token')) {
+        console.log("🔢 Ошибка связана с токенами");
+        shouldRetry = false; // Не ретраим при ошибках токенов
+      } else if (error.message.includes('Load failed') || 
+                 error.message.includes('network') || 
+                 error.message.includes('fetch') ||
+                 error.message.includes('connection')) {
+        console.log("🌐 Сетевая ошибка обнаружена");
+        shouldRetry = true;
+      } else {
+        console.log("🔄 Неизвестная ошибка, пробуем повторить");
+        shouldRetry = true;
+      }
+    }
+    
+    // Логика повторных попыток
+    if (shouldRetry && retryCount < MAX_RETRIES) {
+      const delay = RETRY_DELAYS[retryCount] || 10000;
+      console.log(`🔄 Повторная попытка через ${delay/1000} секунд (попытка ${retryCount + 2}/${MAX_RETRIES + 1})`);
+      
+      // Обновляем прогресс
+      onProgress(`Этап 5/7: Анализ дисбаланса прав... Повторная попытка ${retryCount + 2}/${MAX_RETRIES + 1}`);
+      
+      // Ждем перед повторной попыткой
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      // Рекурсивный вызов с увеличенным счетчиком
+      return await findRightsImbalance(allAnalysis, paragraphs, perspective, onProgress, retryCount + 1);
+    }
+    
+    console.error(`❌ Все попытки исчерпаны (${retryCount + 1}/${MAX_RETRIES + 1}), возвращаем fallback результат`);
     return { 
       rightsImbalance: [
         {
