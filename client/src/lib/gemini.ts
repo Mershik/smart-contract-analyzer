@@ -119,7 +119,9 @@ const keyPool = new ApiKeyPool();
 
 // Функция для извлечения JSON из "грязного" ответа
 function extractJsonFromResponse(rawResponse: string): any {
-  console.log("🔍 Обработка сырого ответа:", rawResponse.substring(0, 200));
+  console.log("🔍 ДЕТАЛЬНАЯ ОБРАБОТКА JSON ОТВЕТА:");
+  console.log("🔍 Размер ответа:", rawResponse.length, "символов");
+  console.log("🔍 Первые 200 символов:", rawResponse.substring(0, 200));
   
   // Проверка на пустой ответ
   if (!rawResponse || rawResponse.trim().length === 0) {
@@ -158,8 +160,12 @@ function extractJsonFromResponse(rawResponse: string): any {
   try {
     return JSON.parse(cleanedResponse);
   } catch (error) {
-    console.error("❌ Ошибка парсинга JSON:", error);
+    console.error("❌ ДЕТАЛЬНАЯ ОШИБКА ПАРСИНГА JSON:");
+    console.error("❌ Тип ошибки:", error?.constructor?.name);
+    console.error("❌ Сообщение ошибки:", error instanceof Error ? error.message : String(error));
     console.log("📝 Исходный ответ длиной:", rawResponse.length);
+    console.log("📝 Очищенный ответ длиной:", cleanedResponse.length);
+    console.log("📝 Последние 300 символов очищенного ответа:", cleanedResponse.substring(Math.max(0, cleanedResponse.length - 300)));
     
     // Попытка восстановить обрезанный JSON
     let repairedJson = cleanedResponse;
@@ -180,8 +186,10 @@ function extractJsonFromResponse(rawResponse: string): any {
       // Если количество кавычек нечетное, значит есть незакрытая строка
       if (quoteCount % 2 !== 0) {
         // Обрезаем до последней кавычки и добавляем закрывающую
-        repairedJson = repairedJson.substring(0, lastQuoteIndex + 1) + '"';
         console.log("🔧 Попытка закрыть обрезанную строку");
+        console.log("🔧 Найдено незакрытых кавычек:", Math.floor(quoteCount/2) + 1);
+        console.log("🔧 Последняя кавычка на позиции:", lastQuoteIndex);
+        repairedJson = repairedJson.substring(0, lastQuoteIndex + 1) + '"';
       }
     }
     
@@ -197,6 +205,12 @@ function extractJsonFromResponse(rawResponse: string): any {
     }
     
     // Добавляем недостающие закрывающие символы
+    if (openBrackets > 0 || openBraces > 0) {
+      console.log("🔧 Добавляем недостающие закрывающие символы:");
+      console.log("🔧 Незакрытых квадратных скобок:", openBrackets);
+      console.log("🔧 Незакрытых фигурных скобок:", openBraces);
+    }
+    
     while (openBrackets > 0) {
       repairedJson += ']';
       openBrackets--;
@@ -1618,6 +1632,12 @@ async function findContradictions(
 ): Promise<any> {
   // onProgress уже вызван в основной функции
   
+  // Логирование входных данных
+  console.log(`📊 ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ПОИСКА ПРОТИВОРЕЧИЙ:`);
+  console.log(`📊 Всего анализов получено: ${allAnalysis.length}`);
+  console.log(`📊 Всего параграфов: ${paragraphs.length}`);
+  console.log(`📊 Перспектива анализа: ${perspective}`);
+  
   // Подготавливаем данные по каждому проанализированному пункту с полными текстами
   const analyzedSummary = allAnalysis
     .filter(item => item.category && item.category !== null)
@@ -1631,6 +1651,12 @@ async function findContradictions(
       };
     })
     .slice(0, 25); // Немного уменьшаем количество пунктов из-за увеличенного размера
+
+  console.log(`📊 После фильтрации и обрезки: ${analyzedSummary.length} пунктов`);
+  
+  // Подсчет размера данных
+  const inputDataSize = JSON.stringify(analyzedSummary).length;
+  console.log(`📊 Размер входных данных: ${inputDataSize} символов (${Math.round(inputDataSize/4)} токенов приблизительно)`);
 
   // Если анализированных пунктов мало, не ищем противоречия
   if (analyzedSummary.length < 3) {
@@ -1704,13 +1730,21 @@ ${JSON.stringify(analyzedSummary, null, 2)}
 
 Уровни серьезности: "high", "medium", "low"`;
 
+  // Логирование промпта
+  const promptSize = contradictionsPrompt.length;
+  console.log(`📝 Размер промпта: ${promptSize} символов (${Math.round(promptSize/4)} токенов приблизительно)`);
+  console.log(`📝 Первые 500 символов промпта:`, contradictionsPrompt.substring(0, 500));
+  console.log(`📝 Последние 200 символов промпта:`, contradictionsPrompt.substring(promptSize - 200));
+
   try {
+    console.log(`⚙️ Конфигурация модели: maxOutputTokens=8192, temperature=0.1`);
+    
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: contradictionsPrompt }] }],
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.1,
-        maxOutputTokens: 8000, // Максимум для Gemini 2.5 Flash
+        maxOutputTokens: 8192, // Увеличиваем до 8192 токенов
         topP: 0.95,
         topK: 64,
       },
@@ -1722,8 +1756,22 @@ ${JSON.stringify(analyzedSummary, null, 2)}
       ],
     });
 
+    // Логирование информации о токенах
+    const usageMetadata = result.response.usageMetadata;
+    if (usageMetadata) {
+      console.log(`🔢 СТАТИСТИКА ТОКЕНОВ:`);
+      console.log(`🔢 Входные токены: ${usageMetadata.promptTokenCount || 'неизвестно'}`);
+      console.log(`🔢 Выходные токены: ${usageMetadata.candidatesTokenCount || 'неизвестно'}`);
+      console.log(`🔢 Всего токенов: ${usageMetadata.totalTokenCount || 'неизвестно'}`);
+    } else {
+      console.log(`⚠️ Информация о токенах недоступна`);
+    }
+
     const rawResponse = result.response.text();
-    console.log("🔍 Сырой ответ поиска противоречий:", rawResponse.substring(0, 300));
+    const responseSize = rawResponse.length;
+    console.log(`📤 Размер ответа: ${responseSize} символов`);
+    console.log("🔍 Первые 300 символов ответа:", rawResponse.substring(0, 300));
+    console.log("🔍 Последние 200 символов ответа:", rawResponse.substring(Math.max(0, responseSize - 200)));
     
     if (!rawResponse || rawResponse.trim() === '') {
       console.log("⚠️ Пустой ответ при поиске противоречий");
@@ -1737,11 +1785,22 @@ ${JSON.stringify(analyzedSummary, null, 2)}
     return { contradictions };
     
   } catch (error) {
-    console.error("❌ Ошибка при поиске противоречий:", error);
-    if (error instanceof Error && error.message.includes('429')) {
-      keyPool.markKeyAsExhausted(keyToUse);
-      console.log("🔑 Ключ исчерпан при поиске противоречий");
+    console.error("❌ ДЕТАЛЬНАЯ ОШИБКА при поиске противоречий:");
+    console.error("❌ Тип ошибки:", error?.constructor?.name);
+    console.error("❌ Сообщение ошибки:", error instanceof Error ? error.message : String(error));
+    console.error("❌ Полная ошибка:", error);
+    
+    if (error instanceof Error) {
+      if (error.message.includes('429')) {
+        keyPool.markKeyAsExhausted(keyToUse);
+        console.log("🔑 Ключ исчерпан при поиске противоречий (429 ошибка)");
+      } else if (error.message.includes('quota')) {
+        console.log("💰 Превышена квота API");
+      } else if (error.message.includes('token')) {
+        console.log("🔢 Ошибка связана с токенами");
+      }
     }
+    
     return { contradictions: [] };
   }
 }
