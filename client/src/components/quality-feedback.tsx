@@ -77,30 +77,28 @@ export function QualityFeedback({ analysisId, onSubmitFeedback }: QualityFeedbac
 
   if (isSubmitted) {
     return (
-      <Card className="border-green-200 bg-green-50">
-        <CardContent className="pt-6">
-          <div className="flex items-center space-x-2 text-green-700">
-            <ThumbsUp size={20} />
-            <span className="font-medium">Спасибо за отзыв!</span>
-          </div>
-          <p className="text-sm text-green-600 mt-2">
-            Ваша оценка сохранена локально и поможет улучшить качество анализа договоров. 
-            Посмотреть статистику можно в разделе "Аналитика качества".
-          </p>
-        </CardContent>
-      </Card>
+      <div className="bg-white rounded-xl shadow-sm border border-green-200 p-6 mb-6 bg-green-50">
+        <div className="flex items-center space-x-2 text-green-700">
+          <ThumbsUp size={20} />
+          <span className="font-medium">Спасибо за отзыв!</span>
+        </div>
+        <p className="text-sm text-green-600 mt-2">
+          Ваша оценка сохранена локально и поможет улучшить качество анализа договоров. 
+          Посмотреть статистику можно в разделе "Аналитика качества".
+        </p>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center space-x-2">
-          <Star className="text-orange-500" size={20} />
-          <span>Оцените качество анализа</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+      <div className="flex items-center mb-6">
+        <Star className="text-orange-500 mr-3" size={20} />
+        <h3 className="text-lg font-semibold text-gray-900">
+          Оцените качество анализа
+        </h3>
+      </div>
+      <div className="space-y-4">
         {/* Рейтинг */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -202,7 +200,7 @@ export function QualityFeedback({ analysisId, onSubmitFeedback }: QualityFeedbac
           <MessageSquare size={16} className="mr-2" />
           Отправить отзыв
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 } 

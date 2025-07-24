@@ -14,20 +14,18 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
 
   if (rightsImbalance.length === 0) {
     return (
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Scale className="h-5 w-5 text-green-600" />
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="flex items-center mb-6">
+          <Scale className="h-5 w-5 mr-3 text-green-600" />
+          <h3 className="text-lg font-semibold text-gray-900">
             Дисбаланс прав сторон
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2 text-green-600">
-            <CheckCircle className="h-5 w-5" />
-            <span>Критичный дисбаланс прав между сторонами не обнаружен</span>
-          </div>
-        </CardContent>
-      </Card>
+          </h3>
+        </div>
+        <div className="flex items-center gap-2 text-green-600">
+          <CheckCircle className="h-5 w-5" />
+          <span>Критичный дисбаланс прав между сторонами не обнаружен</span>
+        </div>
+      </div>
     );
   }
 
@@ -89,14 +87,14 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
   const totalSupplierRights = rightsImbalance.reduce((sum, item) => sum + item.supplierRights, 0);
 
   return (
-    <Card className="mb-6">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Scale className="h-5 w-5 text-amber-600" />
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+      <div className="flex items-center mb-6">
+        <Scale className="h-5 w-5 mr-3 text-amber-600" />
+        <h3 className="text-lg font-semibold text-gray-900">
           Дисбаланс прав сторон ({rightsImbalance.length})
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </h3>
+      </div>
+      <div className="space-y-4">
         {/* Группированные дисбалансы */}
         <div className="space-y-3">
           {Object.entries(groupedImbalances).map(([type, imbalances]) => {
@@ -108,10 +106,10 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
             return (
               <div
                 key={type}
-                className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow"
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4"
               >
                 {/* Заголовок группы */}
-                <div className="p-4 bg-gray-50 border-b">
+                <div className="mb-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="text-amber-600">{getTypeIcon(type)}</div>
@@ -130,11 +128,11 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                 </div>
 
                 {/* Основная информация */}
-                <div className="p-4">
+                <div className="mb-4">
                   
                   {/* Описание дисбаланса */}
                   {mainImbalance.description && (
-                    <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded">
+                    <div className="mb-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                       <div className="text-sm text-amber-800">
                         {mainImbalance.description}
                       </div>
@@ -142,7 +140,7 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                   )}
                   
                   {/* Рекомендация */}
-                  <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <div className="flex items-start gap-2">
                       <AlertTriangle className="h-4 w-4 text-blue-600 mt-0.5" />
                       <div className="text-sm text-blue-800">
@@ -155,7 +153,7 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
 
                 {/* Детализированная информация */}
                 {hasDetails && (
-                  <div className="border-t bg-gray-50 p-4">
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                     <div className="grid md:grid-cols-2 grid-cols-1 gap-4">
                       {/* Левая колонка: Покупатель */}
                       {buyerClauses.length > 0 ? (
@@ -169,7 +167,7 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                               <div
                                 key={clause.id}
                                 className={
-                                  `text-sm bg-blue-50 p-2 rounded border-l-2 border-blue-300 transition-colors` +
+                                  `text-sm bg-blue-50 border border-blue-200 p-3 rounded-lg transition-colors` +
                                   (clause.text.length > 100 ? ' cursor-pointer hover:bg-blue-100' : '')
                                 }
                                 onClick={() => clause.text.length > 100 && toggleClause(`buyer-${clause.id}`)}
@@ -190,7 +188,7 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                           </div>
                         </div>
                       ) : (
-                        <div className="min-h-[48px] bg-blue-50 rounded border-l-2 border-blue-100 opacity-60" />
+                        <div className="min-h-[48px] bg-blue-50 border border-blue-200 rounded-lg opacity-60" />
                       )}
                       {/* Правая колонка: Поставщик */}
                       {supplierClauses.length > 0 ? (
@@ -204,7 +202,7 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                               <div
                                 key={clause.id}
                                 className={
-                                  `text-sm bg-green-50 p-2 rounded border-l-2 border-green-300 transition-colors` +
+                                  `text-sm bg-green-50 border border-green-200 p-3 rounded-lg transition-colors` +
                                   (clause.text.length > 100 ? ' cursor-pointer hover:bg-green-100' : '')
                                 }
                                 onClick={() => clause.text.length > 100 && toggleClause(`supplier-${clause.id}`)}
@@ -225,7 +223,7 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
                           </div>
                         </div>
                       ) : (
-                        <div className="min-h-[48px] bg-green-50 rounded border-l-2 border-green-100 opacity-60" />
+                        <div className="min-h-[48px] bg-green-50 border border-green-200 rounded-lg opacity-60" />
                       )}
                     </div>
                   </div>
@@ -235,7 +233,7 @@ export function RightsImbalanceResults({ rightsImbalance }: RightsImbalanceResul
           })}
         </div>
 
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

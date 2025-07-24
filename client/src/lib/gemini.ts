@@ -2063,6 +2063,41 @@ function findCyclicReferences(
   return defects;
 }
 
+// Функция для извлечения информации о штрафах/неустойках из текста
+function extractPenaltyInfo(text: string): string | null {
+  if (!text) return null;
+  
+  // Ищем штрафы в рублях
+  const rubleMatch = text.match(/штраф[а-я]*\s+в\s+размере\s+(\d+(?:\s?\d+)*)\s*рубл/i);
+  if (rubleMatch) {
+    const amount = rubleMatch[1].replace(/\s/g, '');
+    return `штраф ${amount} рублей`;
+  }
+  
+  // Ищем неустойки в процентах
+  const percentMatch = text.match(/(?:неустойк[а-яё]*|пен[яюё])\s+в\s+размере\s+(\d+(?:[.,]\d+)?)\s*%/i);
+  if (percentMatch) {
+    return `неустойка ${percentMatch[1]}%`;
+  }
+  
+  // Ищем пени в процентах
+  const penaltyMatch = text.match(/пен[яюё]\s+в\s+размере\s+(\d+(?:[.,]\d+)?)\s*%/i);
+  if (penaltyMatch) {
+    return `пеня ${penaltyMatch[1]}%`;
+  }
+  
+  // Ищем общие упоминания штрафов
+  if (/штраф/i.test(text)) {
+    return "штраф";
+  }
+  
+  if (/неустойк/i.test(text)) {
+    return "неустойка";
+  }
+  
+  return null;
+}
+
 // Новая функция агрегации и анализа прав с взвешиванием (гибридный подход)
 function analyzeRightsImbalanceProgrammatically(
   classifiedClauses: Array<{ id: string; party: string; type: string }>,
@@ -2088,21 +2123,26 @@ function analyzeRightsImbalanceProgrammatically(
   const supplierLiability = supplierClauses.filter(c => c.type === 'liability');
   
   if (supplierLiability.length > 0 || buyerLiability.length > 0) {
-    const buyerPenalty = extractFinancialValue(buyerLiability.map(c => allParagraphs.find(p => p.id === c.id)?.text || ''));
-    const supplierPenalty = extractFinancialValue(supplierLiability.map(c => allParagraphs.find(p => p.id === c.id)?.text || ''));
+    // Анализируем тексты пунктов для выявления размеров штрафов/неустоек
+    const buyerTexts = buyerLiability.map(c => allParagraphs.find(p => p.id === c.id)?.text || '').join(' ');
+    const supplierTexts = supplierLiability.map(c => allParagraphs.find(p => p.id === c.id)?.text || '').join(' ');
+    
+    const buyerPenaltyInfo = extractPenaltyInfo(buyerTexts);
+    const supplierPenaltyInfo = extractPenaltyInfo(supplierTexts);
     
     let isImbalanced = false;
-    let description = `Анализ финансовой ответственности. Прав Поставщика: ${supplierLiability.length}, прав Покупателя: ${buyerLiability.length}.`;
+    let description = `Анализ финансовой ответственности.`;
     let severity = 'low';
 
-    if (supplierPenalty > buyerPenalty * 2 && buyerPenalty >= 0) {
+    // Проверяем дисбаланс по количеству прав
+    if (supplierLiability.length > buyerLiability.length + 1) {
       isImbalanced = true;
-      description = `Обнаружен критический дисбаланс ответственности: санкции, которые может применить Поставщик (например, пеня ${supplierPenalty}%), значительно выше санкций, доступных Покупателю (например, неустойка ${buyerPenalty}%).`;
+      description = `Обнаружен критический дисбаланс ответственности: санкции, которые может применить Поставщик${supplierPenaltyInfo ? ` (например, ${supplierPenaltyInfo})` : ''}, значительно превышают санкции, доступные Покупателю${buyerPenaltyInfo ? ` (например, ${buyerPenaltyInfo})` : ''}.`;
       severity = 'high';
-    } else if (supplierLiability.length > buyerLiability.length + 1) {
-        isImbalanced = true;
-        description = `Обнаружен количественный дисбаланс в правах на взыскание: у Поставщика (${supplierLiability.length}) больше инструментов для наложения санкций, чем у Покупателя (${buyerLiability.length}).`
-        severity = 'medium';
+    } else if (supplierLiability.length > buyerLiability.length) {
+      isImbalanced = true;
+      description = `Обнаружен количественный дисбаланс в правах на взыскание: у Поставщика (${supplierLiability.length}) больше инструментов для наложения санкций, чем у Покупателя (${buyerLiability.length}).`;
+      severity = 'medium';
     }
 
     if (isImbalanced) {
@@ -2110,8 +2150,8 @@ function analyzeRightsImbalanceProgrammatically(
         id: `imbalance_liability`, type: 'liability', description, severity,
         buyerRights: buyerLiability.length, supplierRights: supplierLiability.length,
         recommendation: `Рекомендуется пересмотреть размеры и основания для неустоек, чтобы обеспечить соразмерность финансовой ответственности сторон.`,
-        buyerRightsClauses: buyerLiability.map(c => allParagraphs.find(p => p.id === c.id)),
-        supplierRightsClauses: supplierLiability.map(c => allParagraphs.find(p => p.id === c.id)),
+        buyerRightsClauses: buyerLiability.map(c => allParagraphs.find(p => p.id === c.id)).filter(Boolean),
+        supplierRightsClauses: supplierLiability.map(c => allParagraphs.find(p => p.id === c.id)).filter(Boolean),
       });
     }
   }

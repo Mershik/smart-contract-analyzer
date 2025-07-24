@@ -12,19 +12,17 @@ export function ContradictionsResults({ contradictions, showContradictions }: Co
   // Всегда рендерим компонент для корректной навигации
   if (!showContradictions) {
     return (
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold text-gray-900 flex items-center">
-            <AlertTriangle className="w-5 h-5 mr-2 text-gray-400" />
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="flex items-center mb-6">
+          <AlertTriangle className="w-5 h-5 mr-3 text-gray-400" />
+          <h3 className="text-lg font-semibold text-gray-900">
             Выявленные противоречия (скрыто)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-gray-500">
-            <p>Фильтр противоречий отключен</p>
-          </div>
-        </CardContent>
-      </Card>
+          </h3>
+        </div>
+        <div className="text-center py-8 text-gray-500">
+          <p>Фильтр противоречий отключен</p>
+        </div>
+      </div>
     );
   }
 
@@ -96,14 +94,14 @@ export function ContradictionsResults({ contradictions, showContradictions }: Co
   };
 
   return (
-    <Card className="mb-6">
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold text-gray-900 flex items-center">
-          <AlertTriangle className="w-5 h-5 mr-2 text-red-500" />
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+      <div className="flex items-center mb-6">
+        <AlertTriangle className="w-5 h-5 mr-3 text-red-500" />
+        <h3 className="text-lg font-semibold text-gray-900">
           Выявленные противоречия ({contradictions.length})
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+        </h3>
+      </div>
+      <div>
         {contradictions.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
@@ -175,7 +173,7 @@ export function ContradictionsResults({ contradictions, showContradictions }: Co
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 } 

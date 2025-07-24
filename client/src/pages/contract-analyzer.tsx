@@ -9,7 +9,7 @@ import { StructuralAnalysisComponent } from "@/components/structural-analysis";
 import { Button } from "@/components/ui/button";
 import { useGeminiAnalysis } from "@/hooks/use-gemini-analysis";
 import { exportToDocx } from "@/lib/docx-export";
-import type { ContractParagraph, Contradiction, RightsImbalance } from "@shared/schema";
+import type { ContractParagraph, Contradiction, RightsImbalance, StructuralAnalysis } from "@shared/schema";
 import { ContradictionsResults } from "@/components/contradictions-results";
 import { RightsImbalanceResults } from "@/components/rights-imbalance-results";
 import { AnalysisPerspective, PerspectiveSelector } from "@/components/perspective-selector";
@@ -221,7 +221,9 @@ const defaultContractText = `
 государственного оборонного заказа.
 10.2.	Нарушение положений п.10.2. (включая подпункты) Договора является основанием для одностороннего внесудебного расторжения Договора и предъявлением требований о возмещении убытков, причиненных таким нарушением.
 10.3.	В случае взыскания с Поставщика неустоек, штрафов, в том числе административных штрафов, взыскания прочих расходов и причинения убытков со стороны органов государственной власти, в связи с исполнением Покупателем или его клиентами государственных контрактов, контрактов в сфере государственного оборонного заказа, и наложением в связи с этим дополнительных обязательств на Поставщика, Покупатель обязан возместить такие штрафы, неустойки, убытки в полном объёме и выплатить Поставщику неустойку в размере 1 000 000 (один миллион) рублей в течение пяти рабочих дней с даты получения от Поставщика соответствующего письменного требования. При этом Поставщик не обязан оспаривать законность действий органов государственной власти.
+
 11	Прочие условия
+
 11.1 Переписка по электронной связи, позволяющая однозначно идентифицировать отправителя–Сторону по Договору и содержание отправленного документа, признается сторонами как имеющая юридическую силу до момента получения оригиналов.
 11.2 Уступка прав требования третьим лицам без согласования Сторон по настоящему Договору не допускается.
 11.3.	Стороны могут осуществлять документооборот, связанный с исполнением настоящего Договора, посредством системы электронного документооборота, с которой возможен роуминг документов из системы ЭДО.
@@ -236,7 +238,7 @@ export default function ContractAnalyzer() {
     const [contractParagraphs, setContractParagraphs] = useState<ContractParagraph[]>([]);
     const [missingRequirements, setMissingRequirements] = useState<ContractParagraph[]>([]);
     const [ambiguousConditions, setAmbiguousConditions] = useState<ContractParagraph[]>([]);
-    const [structuralAnalysis, setStructuralAnalysis] = useState<any>(null);
+    const [structuralAnalysis, setStructuralAnalysis] = useState<StructuralAnalysis | undefined>(undefined);
     const [contradictions, setContradictions] = useState<Contradiction[]>([]);
     const [rightsImbalance, setRightsImbalance] = useState<RightsImbalance[]>([]);
     const [showCompliance, setShowCompliance] = useState(true);
@@ -279,7 +281,7 @@ export default function ContractAnalyzer() {
         setContractParagraphs([]);
         setMissingRequirements([]);
         setAmbiguousConditions([]);
-        setStructuralAnalysis(null);
+        setStructuralAnalysis(undefined);
         setContradictions([]);
         setRightsImbalance([]);
         
@@ -315,7 +317,7 @@ export default function ContractAnalyzer() {
             setContractParagraphs(contractParagraphs || []);
             setMissingRequirements(missingRequirements || []);
             setAmbiguousConditions(ambiguousConditions || []);
-            setStructuralAnalysis(structuralAnalysis || null);
+            setStructuralAnalysis(structuralAnalysis || undefined);
             setContradictions(contradictions || []);
             setRightsImbalance(rightsImbalance || []);
             
@@ -387,7 +389,7 @@ export default function ContractAnalyzer() {
     const otherCount = (contractParagraphs || []).filter(p => p.category === 'other' || p.category === 'ambiguous').length;
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
             {/* Header */}
             <header className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -535,7 +537,13 @@ export default function ContractAnalyzer() {
                                             showRisks={showRisks}
                                             showOther={showOther}
                                             showMissing={showMissing}
-                                            exportToDocx={() => exportToDocx(contractParagraphs)}
+                                            exportToDocx={() => exportToDocx({
+                                                contractParagraphs,
+                                                missingRequirements,
+                                                contradictions,
+                                                rightsImbalance,
+                                                structuralAnalysis
+                                            })}
                                             onUpdateComment={handleUpdateComment}
                                             onSubmitFeedback={handleSubmitFeedback}
                                             showContradictions={showContradictions}

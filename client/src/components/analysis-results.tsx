@@ -69,16 +69,16 @@ export function AnalysisResults({
   const visibleParagraphs = contractParagraphs;
 
   return (
-    <Card className="mb-6">
-      <CardHeader className="flex flex-row justify-between items-center">
-        <CardTitle className="text-2xl font-bold text-gray-900">Результаты анализа</CardTitle>
-        <Button onClick={handleExport} className="flex items-center gap-2">
-          <Download size={16} />
-          Экспорт в DOCX
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Информационная панель */}
+    <>
+      {/* Информационная панель */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="flex flex-row justify-between items-center mb-6">
+          <h3 className="text-2xl font-bold text-gray-900">Результаты анализа</h3>
+          <Button onClick={handleExport} className="flex items-center gap-2">
+            <Download size={16} />
+            Экспорт в DOCX
+          </Button>
+        </div>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-center mb-2">
             <FileText className="text-blue-600 mr-2" size={20} />
@@ -89,59 +89,59 @@ export function AnalysisResults({
             Анализ проводится в соответствии с российским законодательством.
           </p>
         </div>
+      </div>
 
-        {/* Основной текст договора с анализом */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center">
-              <FileText className="w-5 h-5 mr-2 text-gray-600" />
-              Анализ договора по абзацам
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {visibleParagraphs.map((paragraph) => (
-              <ExpandableParagraph
-                key={paragraph.id}
-                paragraph={paragraph}
-                showCompliance={showCompliance}
-                showPartial={showPartial}
-                showRisks={showRisks}
-                showOther={showOther}
-                onToggle={(id) => {
-                  // Здесь можно добавить логику для обработки расширения/сворачивания
-                  console.log(`Toggled paragraph ${id}`);
-                }}
-              />
+      {/* Основной текст договора с анализом */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="flex items-center mb-6">
+          <FileText className="w-5 h-5 mr-3 text-gray-600" />
+          <h3 className="text-lg font-semibold text-gray-900">
+            Анализ договора по абзацам
+          </h3>
+        </div>
+        <div className="space-y-3">
+          {visibleParagraphs.map((paragraph) => (
+            <ExpandableParagraph
+              key={paragraph.id}
+              paragraph={paragraph}
+              showCompliance={showCompliance}
+              showPartial={showPartial}
+              showRisks={showRisks}
+              showOther={showOther}
+              onToggle={(id) => {
+                // Здесь можно добавить логику для обработки расширения/сворачивания
+                console.log(`Toggled paragraph ${id}`);
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Отсутствующие требования */}
+      {showMissing && missingRequirements.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6" id="missing-requirements">
+          <div className="flex items-center mb-6">
+            <AlertTriangle className="w-5 h-5 mr-3 text-orange-500" />
+            <h3 className="text-lg font-semibold text-gray-900">
+              Отсутствующие требования ({missingRequirements.length})
+            </h3>
+          </div>
+          <div className="space-y-3">
+            {missingRequirements.map((requirement) => (
+              <div key={requirement.id} className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                <h5 className="font-medium text-orange-900 mb-2">{requirement.text}</h5>
+                <p className="text-orange-800 text-sm mb-3">{requirement.comment}</p>
+                {requirement.recommendation && (
+                  <div className="bg-white border border-orange-300 rounded p-3 mt-2">
+                    <p className="text-orange-900 text-sm font-medium">Рекомендация:</p>
+                    <p className="text-orange-800 text-sm">{requirement.recommendation}</p>
+                  </div>
+                )}
+              </div>
             ))}
-          </CardContent>
-        </Card>
-
-        {/* Отсутствующие требования */}
-        {showMissing && missingRequirements.length > 0 && (
-          <Card className="mb-6" id="missing-requirements">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900 flex items-center">
-                <AlertTriangle className="w-5 h-5 mr-2 text-orange-500" />
-                Отсутствующие требования ({missingRequirements.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {missingRequirements.map((requirement) => (
-                <div key={requirement.id} className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                  <h5 className="font-medium text-orange-900 mb-2">{requirement.text}</h5>
-                  <p className="text-orange-800 text-sm mb-3">{requirement.comment}</p>
-                  {requirement.recommendation && (
-                    <div className="bg-white border border-orange-300 rounded p-3 mt-2">
-                      <p className="text-orange-900 text-sm font-medium">Рекомендация:</p>
-                      <p className="text-orange-800 text-sm">{requirement.recommendation}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-      </CardContent>
-    </Card>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
