@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест анимации прогресса</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .progress-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b35, #ff8c42);
+            width: 0%;
+            transition: width 0.1s ease-out;
+        }
+        .progress-text {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="progress-container">
+        <h2>Тест анимации прогресса</h2>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-text" id="progressText">0% завершено</div>
+        
+        <div class="controls">
+            <button onclick="animateToProgress(15)">15%</button>
+            <button onclick="animateToProgress(35)">35%</button>
+            <button onclick="animateToProgress(60)">60%</button>
+            <button onclick="animateToProgress(85)">85%</button>
+            <button onclick="animateToProgress(100)">100%</button>
+            <button onclick="resetProgress()">Сброс</button>
+        </div>
+    </div>
+
+    <script>
+        let currentProgress = 0;
+        let targetProgress = 0;
+        let animationInterval = null;
+
+        function animateToProgress(newTarget) {
+            if (newTarget <= targetProgress) return; // Не идем назад
+            
+            targetProgress = newTarget;
+            
+            // Останавливаем предыдущую анимацию
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            const progressDiff = Math.abs(targetProgress - currentProgress);
+            
+            // Адаптивная скорость
+            let animationDuration;
+            if (progressDiff > 50) {
+                animationDuration = 4000; // 4 секунды для больших изменений
+            } else if (progressDiff > 20) {
+                animationDuration = 2500; // 2.5 секунды для средних изменений
+            } else {
+                animationDuration = 1500; // 1.5 секунды для маленьких изменений
+            }
+            
+            const steps = Math.max(30, Math.min(100, progressDiff * 2));
+            const stepDuration = animationDuration / steps;
+            const stepSize = (targetProgress - currentProgress) / steps;
+            
+            animationInterval = setInterval(() => {
+                currentProgress += stepSize;
+                
+                if ((stepSize > 0 && currentProgress >= targetProgress) || 
+                    (stepSize < 0 && currentProgress <= targetProgress)) {
+                    currentProgress = targetProgress;
+                    clearInterval(animationInterval);
+                    animationInterval = null;
+                }
+                
+                updateDisplay();
+            }, stepDuration);
+        }
+        
+        function updateDisplay() {
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            
+            progressFill.style.width = currentProgress + '%';
+            progressText.textContent = Math.round(currentProgress) + '% завершено';
+        }
+        
+        function resetProgress() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+            }
+            currentProgress = 0;
+            targetProgress = 0;
+            updateDisplay();
+        }
+        
+        // Инициализация
+        updateDisplay();
+    </script>
+</body>
+</html>

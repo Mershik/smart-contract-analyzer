@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест прогресса по этапам</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .progress-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b35, #ff8c42);
+            width: 0%;
+            transition: width 0.1s ease-out;
+        }
+        .progress-text {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .stages-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .stage {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border-left: 4px solid #ddd;
+            transition: all 0.3s ease;
+        }
+        .stage.current {
+            background: #fff3cd;
+            border-left-color: #ff6b35;
+        }
+        .stage.completed {
+            background: #d4edda;
+            border-left-color: #28a745;
+        }
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .stage-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Тест прогресса по этапам анализа</h1>
+        
+        <div class="progress-container">
+            <h3>Общий прогресс</h3>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">0% завершено</div>
+        </div>
+
+        <div class="stages-container">
+            <h3>Этапы анализа</h3>
+            <div id="stagesContainer"></div>
+        </div>
+
+        <div class="controls">
+            <h3>Тестирование этапов</h3>
+            <button onclick="simulateStage(0, 5)">Подготовка данных (5%)</button>
+            <button onclick="simulateStage(1, 25)">Анализ содержимого (25%)</button>
+            <button onclick="simulateStage(1, 45)">Анализ содержимого (45%)</button>
+            <button onclick="simulateStage(2, 60)">Поиск требований (60%)</button>
+            <button onclick="simulateStage(3, 70)">Поиск противоречий (70%)</button>
+            <button onclick="simulateStage(4, 80)">Дисбаланс прав (80%)</button>
+            <button onclick="simulateStage(5, 90)">Структурный анализ (90%)</button>
+            <button onclick="simulateStage(6, 100)">Финализация (100%)</button>
+            <br><br>
+            <button onclick="resetProgress()">Сброс</button>
+        </div>
+    </div>
+
+    <script>
+        // Этапы анализа (копия из React компонента)
+        const ANALYSIS_STAGES = [
+            {
+                id: 'preparation',
+                label: 'Подготовка данных',
+                description: 'Разбивка договора на абзацы и подготовка данных',
+                progressRange: [0, 10]
+            },
+            {
+                id: 'content',
+                label: 'Анализ содержимого',
+                description: 'Проверка пунктов договора на соответствие требованиям',
+                progressRange: [10, 50]
+            },
+            {
+                id: 'requirements',
+                label: 'Поиск отсутствующих требований',
+                description: 'Выявление отсутствующих обязательных условий',
+                progressRange: [50, 65]
+            },
+            {
+                id: 'contradictions',
+                label: 'Поиск противоречий',
+                description: 'Поиск противоречий между пунктами договора',
+                progressRange: [65, 75]
+            },
+            {
+                id: 'imbalance',
+                label: 'Анализ дисбаланса прав',
+                description: 'Анализ дисбаланса прав сторон',
+                progressRange: [75, 85]
+            },
+            {
+                id: 'structure',
+                label: 'Итоговый структурный анализ',
+                description: 'Формирование сводки с учетом всех найденных проблем',
+                progressRange: [85, 95]
+            },
+            {
+                id: 'finalization',
+                label: 'Финализация',
+                description: 'Объединение результатов и подготовка отчета',
+                progressRange: [95, 100]
+            }
+        ];
+
+        let currentProgress = 0;
+        let currentStage = 0;
+        let animationInterval = null;
+
+        // Функция ограничения прогресса диапазонами этапов
+        function constrainProgressToStageRanges(progress, currentStageIndex) {
+            if (currentStageIndex < 0 || currentStageIndex >= ANALYSIS_STAGES.length) {
+                return progress;
+            }
+
+            const stage = ANALYSIS_STAGES[currentStageIndex];
+            const [rangeStart, rangeEnd] = stage.progressRange;
+            
+            if (progress < rangeStart) {
+                return rangeStart;
+            }
+            
+            if (progress > rangeEnd && currentStageIndex < ANALYSIS_STAGES.length - 1) {
+                const nextStage = ANALYSIS_STAGES[currentStageIndex + 1];
+                const [nextRangeStart] = nextStage.progressRange;
+                return Math.min(progress, nextRangeStart + 2);
+            }
+            
+            if (currentStageIndex === ANALYSIS_STAGES.length - 1) {
+                return Math.min(progress, 100);
+            }
+            
+            return Math.min(progress, rangeEnd);
+        }
+
+        function simulateStage(stageIndex, targetProgress) {
+            currentStage = stageIndex;
+            
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            const progressDiff = Math.abs(targetProgress - currentProgress);
+            const steps = Math.max(30, Math.min(100, progressDiff * 2));
+            const stepDuration = 2000 / steps;
+            const stepSize = (targetProgress - currentProgress) / steps;
+            
+            animationInterval = setInterval(() => {
+                currentProgress += stepSize;
+                
+                if ((stepSize > 0 && currentProgress >= targetProgress) || 
+                    (stepSize < 0 && currentProgress <= targetProgress)) {
+                    currentProgress = targetProgress;
+                    clearInterval(animationInterval);
+                    animationInterval = null;
+                }
+                
+                // Ограничиваем прогресс диапазонами этапов
+                const constrainedProgress = constrainProgressToStageRanges(currentProgress, currentStage);
+                currentProgress = constrainedProgress;
+                
+                updateDisplay();
+            }, stepDuration);
+        }
+        
+        function updateDisplay() {
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            
+            progressFill.style.width = currentProgress + '%';
+            progressText.textContent = Math.round(currentProgress) + '% завершено';
+            
+            updateStages();
+        }
+        
+        function updateStages() {
+            const container = document.getElementById('stagesContainer');
+            container.innerHTML = '';
+            
+            ANALYSIS_STAGES.forEach((stage, index) => {
+                const stageDiv = document.createElement('div');
+                stageDiv.className = 'stage';
+                
+                if (index < currentStage) {
+                    stageDiv.classList.add('completed');
+                } else if (index === currentStage) {
+                    stageDiv.classList.add('current');
+                }
+                
+                const [rangeStart, rangeEnd] = stage.progressRange;
+                
+                stageDiv.innerHTML = `
+                    <strong>${stage.label}</strong>
+                    <div class="stage-info">${stage.description}</div>
+                    <div class="stage-info">Диапазон: ${rangeStart}% - ${rangeEnd}%</div>
+                `;
+                
+                container.appendChild(stageDiv);
+            });
+        }
+        
+        function resetProgress() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+            }
+            currentProgress = 0;
+            currentStage = 0;
+            updateDisplay();
+        }
+        
+        // Инициализация
+        updateDisplay();
+    </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Progress } from "@/components/ui/progress";
 import { Brain, FileText, Search, CheckCircle2, Zap, Clock } from "lucide-react";
 
@@ -55,7 +55,7 @@ const ANALYSIS_STAGES = [
     label: 'Итоговый структурный анализ',
     description: 'Формирование сводки с учетом всех найденных проблем',
     icon: Search,
-    keywords: ['Этап 6/7', 'итогового структурного анализа', 'Формирование итогового'],
+    keywords: ['Этап 6/7', 'итогового структурного анализа', 'Формирование итогового', 'Этап 6/8', 'Поиск структурных дефектов'],
     progressRange: [85, 95]
   },
   {
@@ -63,7 +63,7 @@ const ANALYSIS_STAGES = [
     label: 'Финализация',
     description: 'Объединение результатов и подготовка отчета',
     icon: Zap,
-    keywords: ['Этап 7/7', 'Финализация'],
+    keywords: ['Этап 7/7', 'Финализация', 'Этап 7/8', 'Формирование итогового структурного анализа', 'Этап 8/8', 'Финализация результатов'],
     progressRange: [95, 100]
   },
   {
@@ -77,7 +77,7 @@ const ANALYSIS_STAGES = [
 ];
 
 // Функция для определения прогресса по сообщению
-function getProgressFromMessage(message: string): number {
+function getProgressFromMessage(message: string, currentProgress: number = 0): number {
   if (!message) return 0;
   // Поиск этапа по ключевым словам
   for (const stage of ANALYSIS_STAGES) {
@@ -112,7 +112,8 @@ function getProgressFromMessage(message: string): number {
   }
   // Если "завершен" явно — 100%
   if (message.includes('завершен')) return 100;
-  return 0;
+  // Если не найдено ключевых слов, возвращаем текущий прогресс (не сбрасываем)
+  return currentProgress;
 }
 
 // Функция для определения текущего этапа
@@ -131,29 +132,28 @@ function getCurrentStage(message: string): number {
 
 export function AnalysisProgress({ isAnalyzing, progress: progressMessage }: AnalysisProgressProps) {
   const [progress, setProgress] = useState(0);
+  const [displayProgress, setDisplayProgress] = useState(0); // Для плавного отображения процентов
   const [currentStage, setCurrentStage] = useState(0);
   const [animating, setAnimating] = useState(false);
-  const [animationStart, setAnimationStart] = useState<number | null>(null);
-  const [animationFrom, setAnimationFrom] = useState(0);
-  const [animationTo, setAnimationTo] = useState(0);
+  const animationStart = useRef<number | null>(null);
+  const animationFrom = useRef(0);
+  const animationTo = useRef(0);
 
   useEffect(() => {
     if (!isAnalyzing) {
-      setProgress(0);
-      setCurrentStage(0);
       setAnimating(false);
-      setAnimationStart(null);
+      animationStart.current = null;
       return;
     }
-    const newProgress = getProgressFromMessage(progressMessage || '');
+    const newProgress = getProgressFromMessage(progressMessage || '', progress);
     const newStage = getCurrentStage(progressMessage || '');
     setCurrentStage(newStage);
-    // Если прогресс меняется — анимируем минимум 1 секунду
-    if (Math.abs(newProgress - progress) > 0.5) {
+    // Всегда анимируем при изменении прогресса для плавного заполнения
+    if (Math.abs(newProgress - progress) > 0.1) {
       setAnimating(true);
-      setAnimationStart(performance.now());
-      setAnimationFrom(progress);
-      setAnimationTo(newProgress);
+      animationStart.current = performance.now();
+      animationFrom.current = progress;
+      animationTo.current = newProgress;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAnalyzing, progressMessage]);
@@ -161,25 +161,29 @@ export function AnalysisProgress({ isAnalyzing, progress: progressMessage }: Ana
   useEffect(() => {
     if (!animating) return;
     let raf: number;
-    const duration = 1000; // минимум 1 секунда
-    const start = animationStart || performance.now();
-    const from = animationFrom;
-    const to = animationTo;
+    const duration = 1500; // увеличиваем длительность для более плавной анимации
+    const start = animationStart.current || performance.now();
+    const from = animationFrom.current;
+    const to = animationTo.current;
     const animate = (now: number) => {
       const elapsed = now - start;
+      // Используем easeInOut для более плавной анимации
       const t = Math.min(elapsed / duration, 1);
-      const value = from + (to - from) * t;
+      const easeT = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      const value = from + (to - from) * easeT;
       setProgress(value);
+      setDisplayProgress(Math.round(value)); // Плавно обновляем отображаемый процент
       if (t < 1) {
         raf = requestAnimationFrame(animate);
       } else {
         setProgress(to);
+        setDisplayProgress(Math.round(to));
         setAnimating(false);
       }
     };
     raf = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(raf);
-  }, [animating, animationStart, animationFrom, animationTo]);
+  }, [animating]);
 
   if (!isAnalyzing) return null;
   const CurrentIcon = ANALYSIS_STAGES[currentStage]?.icon || Brain;
@@ -200,7 +204,7 @@ export function AnalysisProgress({ isAnalyzing, progress: progressMessage }: Ana
           <div className="space-y-2">
             <Progress value={progress} className="w-full h-3" />
             <p className="text-sm text-gray-600">
-              {Math.round(progress)}% завершено
+              {displayProgress}% завершено
             </p>
           </div>
           {/* Этапы анализа */}
