@@ -184,8 +184,7 @@ smart-contract-analyzer/
 │   │   │   └── not-found.tsx                # 404 страница
 │   │   ├── App.tsx                  # Корневой компонент
 │   │   └── main.tsx                 # Точка входа
-│   ├── index.html                   # HTML шаблон
-│   └── my-app/                      # Next.js приложение (не используется)
+│   └── index.html                   # HTML шаблон
 ├── server/                          # Backend Express сервер (опционально, для расширения)
 ├── shared/                          # Общие типы и схемы
 │   └── schema.ts                    # TypeScript типы и Zod схемы
